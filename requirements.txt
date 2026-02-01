@@ -7,5 +7,6 @@ xgboost
 textblob
 vaderSentiment
 plotly
+matplotlib
 
 
