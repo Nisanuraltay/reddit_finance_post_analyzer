@@ -5,6 +5,7 @@ joblib
 scikit-learn
 xgboost
 textblob
-vaderSentiment==3.3.2
+vaderSentiment
 plotly
+
 
