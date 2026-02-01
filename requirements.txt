@@ -3,3 +3,5 @@ pandas
 joblib
 numpy
 scikit-learn
+xgboost
+textblob
