@@ -1,8 +1,9 @@
 streamlit
 pandas
-joblib
 numpy
+joblib
 scikit-learn
 xgboost
 textblob
+vaderSentiment
 plotly
