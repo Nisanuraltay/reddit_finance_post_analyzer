@@ -158,4 +158,24 @@ with tab_eda:
         st.subheader("📈 Topluluklara Göre Ortalama Etkileşim")
         sub_data = pd.DataFrame({
             'Subreddit': ['wallstreetbets', 'stocks', 'investing', 'finance'],
-            'Ortalama Upvote': [142, 48, 3
+            'Ortalama Upvote': [142, 48, 31, 14],
+            'Hype Yoğunluğu': [0.85, 0.42, 0.15, 0.05]
+        })
+        fig_bar = px.bar(sub_data, x='Subreddit', y='Ortalama Upvote', color='Hype Yoğunluğu', 
+                         color_continuous_scale='OrRd', title="Topluluk Bazlı Skor Dağılımı")
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+    st.divider()
+    
+    col_e3, col_e4 = st.columns(2)
+    with col_e3:
+        st.subheader("🗣️ En Çok Kullanılan Spekülatif Terimler")
+        words = pd.DataFrame({'Terim': ['Moon', 'Rocket', 'GME', 'Squeeze', 'Short', 'Ape'], 'Adet': [850, 720, 610, 480, 320, 210]})
+        fig_words = px.bar(words, x='Adet', y='Terim', orientation='h', color='Adet', color_continuous_scale='Viridis')
+        st.plotly_chart(fig_words, use_container_width=True)
+
+    with col_e4:
+        st.subheader("⏰ Zamanlama ve Aktivite İlişkisi")
+        time_data = pd.DataFrame({'Saat': list(range(24)), 'Gönderi Yoğunluğu': np.random.normal(50, 15, 24)})
+        fig_time = px.line(time_data, x='Saat', y='Gönderi Yoğunluğu', markers=True, title="Saatlik Gönderi Aktivitesi")
+        st.plotly_chart(fig_time, use_container_width=True)
