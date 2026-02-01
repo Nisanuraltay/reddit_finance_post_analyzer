@@ -19,6 +19,18 @@ install_requirements()
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 vader_analyzer = SentimentIntensityAnalyzer()
 
+def get_vader_score(text):
+    try:
+        # Eğer kütüphane yüklüyse normal hesaplama yap
+        score = vader_analyzer.polarity_scores(str(text))['compound']
+        return score
+    except NameError:
+        # Eğer kütüphane yüklenmediyse uyarı ver
+        st.warning("⚠️ VADER kütüphanesi yüklenemedi! Skor 0 olarak atanıyor.")
+        return 0.0
+    except Exception as e:
+        return 0.0
+
 # 2. MODEL VE ÖZELLİK LİSTESİNİ YÜKLE
 @st.cache_resource
 def load_assets():
@@ -222,12 +234,13 @@ with tab_eda:
     # --- 3. İÇERİK TİPİ VE YAZAR ETKİSİ ---
     st.subheader("✍️ İçerik Yapısı ve Yazar Güvenilirliği")
     
-    # Başlık Uzunluğu Analizi (Hatalı olan grafik düzeltildi)
-    fig_hist = px.histogram(eda_data, x="Baslik_Uzunlugu", nbins=10,
-                            title="İçerik Uzunluğu Dağılımı (Başarılı Gönderiler)",
-                            color_discrete_sequence=['#00CC96'])
-    st.plotly_chart(fig_hist, use_container_width=True)
+    # BURAYI GÜNCELLEDİK: Eski fig_hist kısmını sildik, senin verdiğin fig_dist'i ekledik
+    fig_dist = px.histogram(eda_data, x='Baslik_Uzunlugu', # Veri setindeki sütun adıyla (B büyük) eşleşmeli
+                            title="Icerik Uzunlugu Dagilimi",
+                            color_continuous_scale="Plasma")
+    
+    st.plotly_chart(fig_dist, use_container_width=True)
 
-    st.success("✅ Tüm analizler Colab'daki 4 ana kategoriye (Zaman, Popülarite, İçerik Tipi, Hype) göre filtrelenerek görselleştirilmiştir.")
-
+    st.success("✅ Tüm analizler Colab'daki 4 ana kategoriye göre filtrelenerek görselleştirilmiştir.")
    
+
