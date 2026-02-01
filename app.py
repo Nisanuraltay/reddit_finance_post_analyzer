@@ -4,10 +4,13 @@ import numpy as np
 import joblib
 from textblob import TextBlob
 import datetime
+import os
+
+# TextBlob için gerekli dil paketini indir (Streamlit Cloud için şart)
+os.system('python -m textblob.download_corpora')
 
 # 1. Modeli ve Özellik Listesini Yükle
-# ESKİ: model = joblib.load('reddit_model.pkl')
-# YENİ:
+# final_features.pkl: Modelin eğitimde gördüğü SÜTUN SIRALAMASINI tutar.
 model = joblib.load('final_reddit_model.pkl') 
 model_features = joblib.load('final_features.pkl')
 
@@ -35,7 +38,7 @@ if st.button("Analiz Et"):
     hype = get_hype_count(user_title)
     title_len = len(user_title)
     
-    # Modelin beklediği tüm sütunları 0 ile hazırla
+    # Modelin beklediği TÜM sütunları (features) 0 ile hazırla
     input_data = pd.DataFrame(0, index=[0], columns=model_features)
     
     # Manuel özellikleri doldur
@@ -44,32 +47,41 @@ if st.button("Analiz Et"):
     input_data['title_len'] = title_len
     input_data['saat'] = posted_time
     
-    # Subreddit encoding'i doldur (Eski sütun yapına göre)
+    # Subreddit encoding'i doldur
     sub_col = f"sub_{selected_subreddit}"
     if sub_col in input_data.columns:
         input_data[sub_col] = 1
 
+    # --- KRİTİK ADIM: SÜTUN HİZALAMA ---
+    # Modelin sütunları hangi sırada beklediğini XGBoost'a aynen gönderiyoruz.
+    input_data = input_data[model_features]
+
     # --- TAHMİN ---
-    log_pred = model.predict(input_data)[0]
-    final_score = np.expm1(log_pred) # Log'dan gerçek skora dön
+    try:
+        log_pred = model.predict(input_data)[0]
+        final_score = np.expm1(log_pred) # Log'dan gerçek skora dön
 
-    # --- SONUÇLARI GÖSTER ---
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.metric("Beklenen Etkileşim (Score)", f"{int(final_score)} Upvote")
-    
-    with col2:
-        # Risk Mantığı
-        if hype > 2 or sentiment > 0.5:
-            st.error("🚨 RİSK: YÜKSEK")
-            st.write("Aşırı spekülatif içerik!")
-        elif hype > 0:
-            st.warning("⚠️ RİSK: ORTA")
-            st.write("Bazı hype kelimeleri tespit edildi.")
-        else:
-            st.success("✅ RİSK: DÜŞÜK")
-            st.write("Dengeli ve doğal görünüm.")
+        # --- SONUÇLARI GÖSTER ---
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.metric("Beklenen Etkileşim (Score)", f"{int(final_score)} Upvote")
+        
+        with col2:
+            # Risk Mantığı
+            if hype > 2 or sentiment > 0.5:
+                st.error("🚨 RİSK: YÜKSEK")
+                st.write("Aşırı spekülatif içerik!")
+            elif hype > 0:
+                st.warning("⚠️ RİSK: ORTA")
+                st.write("Bazı hype kelimeleri tespit edildi.")
+            else:
+                st.success("✅ RİSK: DÜŞÜK")
+                st.write("Dengeli ve doğal görünüm.")
 
-    # Detaylı Analiz Notu
-    st.info(f"**Analiz Özeti:** Bu başlıkta {hype} hype kelimesi ve %{sentiment*100:.1f} duygu yoğunluğu tespit edildi.")
+        # Detaylı Analiz Notu
+        st.info(f"**Analiz Özeti:** Bu başlıkta {hype} hype kelimesi ve %{sentiment*100:.1f} duygu yoğunluğu tespit edildi.")
+        
+    except Exception as e:
+        st.error(f"Tahmin sırasında bir hata oluştu: {e}")
+        st.write("Lütfen model ve özellik dosyalarının GitHub'da güncel olduğundan emin olun.")
