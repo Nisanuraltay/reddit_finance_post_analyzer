@@ -85,3 +85,18 @@ if st.button("Analiz Et"):
     except Exception as e:
         st.error(f"Tahmin sırasında bir hata oluştu: {e}")
         st.write("Lütfen model ve özellik dosyalarının GitHub'da güncel olduğundan emin olun.")
+
+
+# Analiz bittikten sonra en alta eklenebilir
+st.divider() # Görsel bir çizgi çeker
+col_a, col_b, col_c = st.columns(3)
+with col_a:
+    st.write("🔍 **İçerik Analizi**")
+    st.write(f"Karakter Sayısı: {len(user_title)}")
+with col_b:
+    st.write("🎭 **Duygu Durumu**")
+    sentiment_label = "Pozitif" if sentiment > 0 else "Negatif" if sentiment < 0 else "Nötr"
+    st.write(f"Tonlama: {sentiment_label}")
+with col_c:
+    st.write("🔥 **Hype Seviyesi**")
+    st.write("⭐" * (hype if hype <= 5 else 5)) # Hype kadar yıldız basar
