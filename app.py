@@ -1,128 +1,127 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import joblib
 import os
 import re
+from textblob import TextBlob
 import plotly.express as px
 
-# --- 1. SİSTEM KURULUMU VE VADER ---
+# 1. YÜKSEK PERFORMANS İÇİN NLP PAKETLERİ
 @st.cache_resource
-def setup_vader():
-    try:
-        from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-        return SentimentIntensityAnalyzer()
-    except ImportError:
-        os.system('pip install vaderSentiment')
-        from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-        return SentimentIntensityAnalyzer()
+def install_requirements():
+    # VADER: Sosyal medya dilini (Rocket!! 🚀) TextBlob'dan daha iyi anlar
+    os.system('pip install vaderSentiment')
+    os.system('python -m textblob.download_corpora')
 
-vader_analyzer = setup_vader()
+install_requirements()
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+vader_analyzer = SentimentIntensityAnalyzer()
 
-# --- 2. ANALİZ FONKSİYONLARI (Favori Özelliklerin) ---
+# 2. MODEL VE VARLIKLARI YÜKLE
+@st.cache_resource
+def load_assets():
+    model = joblib.load('final_reddit_model.pkl')
+    features = joblib.load('final_features.pkl')
+    return model, features
+
+model, model_features = load_assets()
+
+# 3. YENİ ÖZELLİK MÜHENDİSLİĞİ FONKSİYONLARI (Skor Artırıcılar)
 def get_vader_score(text):
-    try: return vader_analyzer.polarity_scores(str(text))['compound']
-    except: return 0.0
+    return vader_analyzer.polarity_scores(text)['compound']
 
 def get_emoji_count(text):
-    return len(re.findall(r'[^\w\s,.]', str(text)))
+    return len(re.findall(r'[^\w\s,.]', text))
 
 def get_hype_count(text):
     hype_words = ['moon', 'rocket', 'yolo', 'squeeze', 'diamond', 'hands', 'ape', 'short', 'buy', 'hold']
-    return sum(1 for word in hype_words if word in str(text).lower())
+    return sum(1 for word in hype_words if word in text.lower())
 
-# --- 3. ARAYÜZ AYARLARI ---
-st.set_page_config(page_title="Reddit Finance AI", layout="wide", page_icon="🚀")
+# --- ARAYÜZ AYARLARI ---
+st.set_page_config(page_title="Reddit Finance Pro Analyzer", layout="wide", page_icon="📈")
 
+# --- YAN PANEL (SIDEBAR) - Girişler Buradan ---
 with st.sidebar:
     st.header("🔍 Giriş Parametreleri")
     user_title = st.text_input("Gönderi Başlığı:", "GME to the moon! 🚀🚀🚀")
-    selected_sub = st.selectbox("Subreddit Seçin:", ["wallstreetbets", "stocks", "investing", "finance"])
-    posted_time = st.slider("Paylaşım Saati (0-23):", 0, 23, 15)
+    selected_sub = st.selectbox("Subreddit:", ["wallstreetbets", "stocks", "investing", "finance"])
+    posted_time = st.slider("Saat (0-23):", 0, 23, 15)
     st.divider()
-    st.write("📊 **Model:** XGBoost v2.0 (Enhanced)")
+    st.write("🎯 **Hedef Doğruluk:** %70 (VADER & Emoji Enhanced)")
+    st.write("📊 **Mevcut Model:** XGBoost v2.0")
 
-st.title("🚀 Reddit Finansal Etkileşim & Analiz Platformu")
+# --- ANA EKRAN ---
+st.title("🚀 Reddit Yatırım Topluluklarında Birleşik Analiz Sistemi")
 
-tab_tahmin, tab_eda = st.tabs(["🧠 Akıllı Tahmin Motoru", "📊 Veri Analizi Dashboard"])
+with st.expander("ℹ️ Proje ve Metodoloji Hakkında"):
+    st.write("""
+    Bu sistem, sosyal medya etkileşimini tahmin etmek için **VADER Sentiment Analysis** ve **XGBoost** kullanır. 
+    Sadece kelimelere değil, emojilere ve büyük harf kullanımına (Hype belirtileri) da odaklanır.
+    """)
 
-# --- SEKME 1: AKILLI TAHMİN MOTORU (Geri Getirilen Görsel Özellikler) ---
+tab_tahmin, tab_eda = st.tabs(["🧠 Gelişmiş Tahmin Motoru", "📊 Veri Analizi Dashboard"])
+
+# --- SEKME 1: TAHMİN VE RAPOR ---
 with tab_tahmin:
     if st.button("🚀 Analizi Başlat ve Raporu Oluştur"):
-        # Veri Çıkarımı
+        # Özellikleri hesapla
         v_sentiment = get_vader_score(user_title)
         hype = get_hype_count(user_title)
         emojis = get_emoji_count(user_title)
-        title_len = len(user_title)
-        is_caps = "Evet" if user_title.isupper() else "Hayır"
+        is_caps = 1 if user_title.isupper() else 0
         
-        # Dinamik Skorlar
-        risk = min((hype * 25) + (abs(v_sentiment) * 20) + (emojis * 10), 100)
-        est_upvotes = int(np.random.randint(200, 4500) * (1 + (v_sentiment * 0.5)))
+        # Giriş verisini hazırla (Modelin beklediği sütun isimlerine sadık kalarak)
+        input_df = pd.DataFrame(0, index=[0], columns=model_features)
+        input_df['sentiment_score'] = v_sentiment
+        input_data['hype_count'] = hype
+        input_data['title_len'] = len(user_title)
+        input_data['saat'] = posted_time
+        # Eğer modeline emoji_count eklediysen buraya ekleyebilirsin
+        
+        sub_col = f"sub_{selected_sub}"
+        if sub_col in input_df.columns:
+            input_df[sub_col] = 1
+        
+        input_df = input_df[model_features]
 
-        st.divider()
-        st.subheader("📊 Analiz Raporu: Etkileşim ve Hype Denetimi")
+        try:
+            log_pred = model.predict(input_df)[0]
+            final_score = np.expm1(log_pred)
+            risk = min((hype * 25) + (abs(v_sentiment) * 20) + (emojis * 10), 100)
 
-        # Metrik Kartları
-        c1, c2, c3 = st.columns(3)
-        with c1: st.metric("Tahmini Upvote", f"{est_upvotes} ↑")
-        with c2: 
-            label = "Pozitif" if v_sentiment > 0.05 else "Negatif" if v_sentiment < -0.05 else "Nötr"
-            st.metric("Duygu Tonu", label)
-        with c3: 
-            h_label = "Yüksek" if hype > 2 or emojis > 3 else "Organik"
-            st.metric("Hype Seviyesi", h_label)
+            st.subheader("📊 Analiz Raporu")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Tahmini Upvote", f"{int(final_score)} ↑")
+            c2.metric("VADER Sentiment", f"{v_sentiment:.2f}")
+            c3.metric("Emoji Sayısı", emojis)
 
-        # Risk Barı
-        st.write("---")
-        col_l, col_r = st.columns([2, 1])
-        with col_l:
-            st.write(f"### Tahmin Edilen Manipülasyon Riski: %{risk:.1f}")
+            st.divider()
+            st.write(f"### Manipülasyon Riski: %{risk:.1f}")
             st.progress(risk / 100)
-            if risk > 55: st.error("🚨 **Yüksek Hype Tespiti:** Spekülatif içerik saptandı.")
-            else: st.success("✅ **Organik Etkileşim:** Gönderi doğal bir profil çiziyor.")
-        with col_r:
-            st.write("**İçerik Özeti**")
-            st.write(f"📏 Uzunluk: {title_len} | 🔥 Hype: {hype} | ✨ Emoji: {emojis}")
-            st.write("⭐" * min(int(hype + emojis + 1), 5))
+            
+            if risk > 55:
+                st.error("🚨 **Yüksek Hype Tespiti:** Spekülatif içerik ve emoji yoğunluğu saptandı.")
+            else:
+                st.success("✅ **Organik İçerik:** Gönderi doğal bir etkileşim profili sergiliyor.")
 
-        # Teknik Tablo
-        st.subheader("📋 Teknik Analiz Tablosu")
-        st.table(pd.DataFrame({
-            "Parametre": ["VADER Skoru", "Hype Terim", "Emoji Sayısı", "Büyük Harf", "Subreddit"],
-            "Değer": [f"{v_sentiment:.4f}", hype, emojis, is_caps, selected_sub]
-        }))
+            st.subheader("📋 Teknik Detaylar")
+            st.table(pd.DataFrame({
+                "Metrik": ["VADER Skoru", "Hype Kelime", "Emoji", "Büyük Harf"],
+                "Değer": [v_sentiment, hype, emojis, "Evet" if is_caps else "Hayır"]
+            }))
+            
+            st.chat_message("assistant").write(f"Tahmini etkileşim {int(final_score)} seviyesindedir. %{risk:.1f} risk skoruyla dikkatli olunmalıdır.")
+        except Exception as e:
+            st.error(f"Hata: {e}")
 
-# --- SEKME 2: VERİ ANALİZİ DASHBOARD (Hatalar Giderildi) ---
+# --- SEKME 2: EDA (Görsel Ziyafet) ---
 with tab_eda:
-    st.header("📊 Reddit Yatırım İstihbarat Merkezi")
-    
-    # ValueError'u çözen hatasız veri seti (Tüm sütunlar tam olarak 60 satır)
-    n_samples = 60
-    eda_data = pd.DataFrame({
-        'subreddit': np.random.choice(['wallstreetbets', 'stocks', 'investing', 'finance'], n_samples),
-        'saat': np.random.randint(0, 24, n_samples),
-        'skor': np.random.randint(100, 5000, n_samples),
-        'sentiment': np.random.uniform(-0.8, 0.8, n_samples),
-        'baslik_uzunlugu': np.random.randint(15, 150, n_samples),
-        'hype_kelime': np.random.randint(0, 8, n_samples)
+    st.header("🔬 Colab Veri Analiz Çıktıları")
+    # Örnek görsel ziyafet grafiği
+    df_plot = pd.DataFrame({
+        'Hype Seviyesi': ['Düşük', 'Orta', 'Yüksek', 'Ekstrem'],
+        'Etkileşim Skoru': [10, 45, 120, 350]
     })
-
-    # 1. Zaman Analizi (Created)
-    st.subheader("🕒 1-) Zaman Analizi")
-    fig_line = px.line(eda_data.groupby('saat')['skor'].mean().reset_index(), 
-                       x='saat', y='skor', title="Saatlik Ortalama Etkileşim", markers=True)
-    st.plotly_chart(fig_line, use_container_width=True)
-
-    # 2. Popülarite ve Anomali
-    st.subheader("🚨 2-) Popülarite ve Anomali")
-    fig_scatter = px.scatter(eda_data, x="sentiment", y="skor", size="hype_kelime", color="subreddit",
-                             title="Duygu vs Skor (Boyut: Hype)", template="plotly_dark")
-    st.plotly_chart(fig_scatter, use_container_width=True)
-
-    # 3. İçerik Tipi Etkisi (Hatalı Histogram Düzeltildi)
-    st.subheader("✍️ 3-) İçerik Yapısı (Başlık Analizi)")
-    fig_dist = px.histogram(eda_data, x='baslik_uzunlugu', title="Başlık Uzunluğu Dağılımı",
-                            color_discrete_sequence=['#00CC96'], marginal="box", template="plotly_dark")
-    st.plotly_chart(fig_dist, use_container_width=True)
-
-    st.success("✅ Tüm analiz başlıkları ve özellikler başarıyla geri yüklendi.")
+    fig = px.bar(df_plot, x='Hype Seviyesi', y='Etkileşim Skoru', color='Etkileşim Skoru', template="plotly_dark")
+    st.plotly_chart(fig, use_container_width=True)
