@@ -1,79 +1,127 @@
 import streamlit as st
 import pandas as pd
-import joblib
 import numpy as np
+import joblib
+from textblob import TextBlob
+import os
 
-# 1. Modelleri ve Özellikleri Yükle
-try:
-    model = joblib.load('reddit_model.pkl')
-    features = joblib.load('model_features.pkl')
-except Exception as e:
-    st.error(f"Model dosyaları yüklenemedi: {e}")
+# TextBlob için gerekli dil paketini indir (Streamlit Cloud için şart)
+os.system('python -m textblob.download_corpora')
 
-st.set_page_config(page_title="Reddit Hype Engine", layout="wide", page_icon="📈")
+# 1. Modeli ve Özellik Listesini Yükle
+# Dosya isimlerinin GitHub'dakilerle birebir aynı olduğundan emin olun.
+model = joblib.load('final_reddit_model.pkl') 
+model_features = joblib.load('final_features.pkl')
 
-# --- ARAYÜZ BAŞLIĞI ---
-st.title("📈 Reddit Finance Post Analyzer")
-st.markdown("### *Engagement & Hype Risk Engine*")
+# 2. Yardımcı Fonksiyonlar
+def get_sentiment(text):
+    return TextBlob(text).sentiment.polarity
 
-# --- SIDEBAR: GİRİŞ PANELİ ---
+def get_hype_count(text):
+    hype_words = ['moon', 'rocket', 'yolo', 'squeeze', 'diamond', 'hands', 'ape', 'short', 'buy', 'hold']
+    return sum(1 for word in hype_words if word in text.lower())
+
+# 3. Arayüz Tasarımı (Geniş Yerleşim)
+st.set_page_config(page_title="Reddit Finance Analyzer", page_icon="📈", layout="wide")
+
+st.title("📈 Reddit Yatırım Topluluklarında Gönderi Analiz Sistemi")
+st.markdown("""
+**Proje Kapsamı:** Bu çalışma, finans paylaşımlarını analiz ederek **Etkileşim Tahmini** yapar ve 
+içeriğin **Organik mi yoksa Hype/Manipülasyon kaynaklı mı** olduğunu birleşik bir yapıda denetler.
+""")
+
+# Yan Panel: Kullanıcı Girişleri
 with st.sidebar:
-    st.header("🔍 Analiz Parametreleri")
-    post_title = st.text_input("Post Başlığı (Title)", "🚀 Buy GME - Diamond Hands! 💎")
-    
-    sub_list = sorted([c.replace('sub_', '') for c in features if c.startswith('sub_')])
-    selected_sub = st.selectbox("Hangi Subreddit?", sub_list)
-    
-    saat = st.slider("Paylaşım Saati (0-23)", 0, 23, 14)
+    st.header("🔍 Giriş Parametreleri")
+    user_title = st.text_input("Gönderi Başlığı:", "GME to the moon! 🚀")
+    selected_subreddit = st.selectbox("Hedef Subreddit:", ["wallstreetbets", "stocks", "investing", "finance"])
+    posted_time = st.slider("Paylaşım Saati (0-23):", 0, 23, 12)
     st.divider()
-    actual_score = st.number_input("Mevcut Beğeni Sayısı (Score)", min_value=0, value=100)
+    st.write("🛠️ **Model Bilgisi:** XGBoost Regressor")
+    st.write("📊 **Doğruluk (R2):** %54.5")
 
-# --- HESAPLAMA VE ANALİZ MOTORU ---
-if st.button("DERİN ANALİZİ BAŞLAT"):
-    # Girdi Verisini Hazırla
-    input_df = pd.DataFrame(0, index=[0], columns=features)
-    if f'sub_{selected_sub}' in features: input_df[f'sub_{selected_sub}'] = 1
-    if 'saat' in features: input_df['saat'] = saat
+# Ana Ekran Analiz Bölümü
+if st.button("🚀 Analizi Başlat ve Birleşik Raporu Oluştur"):
+    # --- ÖZELLİK ÇIKARIMI ---
+    sentiment = get_sentiment(user_title)
+    hype = get_hype_count(user_title)
+    title_len = len(user_title)
     
-    # 1. Tahmin
-    pred_log = model.predict(input_df)
-    predicted_score = np.expm1(pred_log)[0]
+    # Model hazırlığı ve sütun hizalama (Hata almamak için kritik)
+    input_data = pd.DataFrame(0, index=[0], columns=model_features)
+    input_data['sentiment_score'] = sentiment
+    input_data['hype_count'] = hype
+    input_data['title_len'] = title_len
+    input_data['saat'] = posted_time
     
-    # 2. NLP Analizi
-    hype_keywords = ['moon', 'rocket', 'yolo', 'squeeze', 'diamond', 'hands', 'ape', 'pump', '🚀', '💎', 'buy']
-    found_hype_words = [word for word in hype_keywords if word in post_title.lower()]
-    nlp_risk_bonus = len(found_hype_words) * 10 
+    sub_col = f"sub_{selected_subreddit}"
+    if sub_col in input_data.columns:
+        input_data[sub_col] = 1
     
-    # 3. İstatistiksel Sapma
-    base_diff = actual_score - predicted_score
-    stat_risk = (base_diff / (66.33 * 3)) * 100
-    final_risk = min(100, max(0, stat_risk + nlp_risk_bonus))
+    # Sütunları modelin beklediği sıraya sok
+    input_data = input_data[model_features]
 
-    # --- GÖRSEL ÇIKTILAR ---
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Organik Beklenti", f"{int(predicted_score)} Score")
-    c2.metric("Hype Riski", f"%{final_risk:.1f}")
-    c3.metric("NLP Bonusu", f"+%{nlp_risk_bonus}")
+    # --- TAHMİN VE DENETİM ---
+    try:
+        log_pred = model.predict(input_data)[0]
+        final_score = np.expm1(log_pred)
 
-    st.divider()
-    
-    # Karar Analizi
-    st.subheader("🧠 Sistemin Karar Analizi")
-    if len(found_hype_words) > 0:
-        st.warning(f"⚠️ **NLP Sinyali:** Başlıkta manipülatif kelimeler bulundu: {', '.join(found_hype_words)}")
-    
-    if final_risk > 70:
-        st.error("🚨 **KRİTİK:** Manipülasyon tespiti! Bu post organik görünmüyor.")
-    else:
-        st.success("✅ **GÜVENLİ:** Veriler topluluk normlarıyla uyumlu.")
+        # Raporlama Alanı
+        st.divider()
+        st.subheader("📊 Analiz Raporu: Etkileşim ve Hype Denetimi")
 
-    # 4. XAI Grafiği
-    st.subheader("📊 Model Özellik Ağırlıkları (XAI)")
-    imp_df = pd.DataFrame({'Önem': model.feature_importances_}, index=features).sort_values(by='Önem', ascending=False).head(5)
-    st.bar_chart(imp_df)
+        # 1. Temel Göstergeler (Metric Kartları)
+        col_m1, col_m2, col_m3 = st.columns(3)
+        with col_m1:
+            st.metric("Tahmini Etkileşim (Upvote)", f"{int(final_score)} ↑")
+        with col_m2:
+            sentiment_status = "Pozitif" if sentiment > 0.1 else "Negatif" if sentiment < -0.1 else "Nötr"
+            st.metric("Duygu (Sentiment) Tonu", sentiment_status)
+        with col_m3:
+            hype_status = "Yüksek" if hype > 2 else "Orta" if hype > 0 else "Organik"
+            st.metric("Hype Yoğunluğu", hype_status)
 
-    # 5. Finansal Grafik
-    st.divider()
-    st.subheader("📉 Reddit vs. Piyasa Oynaklığı")
-    chart_data = pd.DataFrame(np.random.randn(20, 2), columns=['Hype', 'Fiyat']).cumsum()
-    st.line_chart(chart_data)
+        # 2. Manipülasyon Analiz Paneli
+        st.write("---")
+        st.write("### 🔍 Hype ve Manipülasyon Göstergeleri")
+        
+        # Risk Skoru (Hype ve Sentiment üzerinden ağırlıklı hesap)
+        risk_score = (hype * 30) + (abs(sentiment) * 20)
+        risk_score = min(risk_score, 100)
+        
+        c_left, c_right = st.columns([2, 1])
+        with c_left:
+            st.write(f"**Tahmin Edilen Manipülasyon Riski: %{risk_score:.1f}**")
+            st.progress(risk_score / 100)
+            
+            if risk_score > 50:
+                st.error("⚠️ **Yüksek Hype Tespiti:** Başlıkta spekülatif kelime yoğunluğu ve aşırı duygusal tonlama saptandı. Etkileşimin yapay olma olasılığı yüksektir.")
+            else:
+                st.success("✅ **Organik Etkileşim:** İçerik, topluluk standartlarına uyumlu ve doğal bir bilgi paylaşımı profili çizmektedir.")
+
+        with c_right:
+            st.write("**İçerik Detayları**")
+            st.write(f"📏 Başlık Uzunluğu: {title_len}")
+            st.write(f"🔥 Spekülatif Terim: {hype} adet")
+            st.write("⭐" * (hype if hype <= 5 else 5))
+
+        # 3. Teknik Veri Özeti (Tablo)
+        st.write("---")
+        st.write("### 📋 Teknik Analiz Tablosu")
+        tech_data = {
+            "Parametre": ["Duygu Skoru", "Spekülatif Terim Sayısı", "Başlık Uzunluğu", "Hedef Topluluk", "Paylaşım Zamanı"],
+            "Değer": [f"{sentiment:.4f}", hype, title_len, selected_subreddit, f"{posted_time}:00"]
+        }
+        st.table(pd.DataFrame(tech_data))
+
+        # 4. Yapay Zeka Önerisi
+        st.chat_message("assistant").write(
+            f"**Özet Değerlendirme:** Girilen başlık, {selected_subreddit} topluluğunda yaklaşık {int(final_score)} upvote alma potansiyeline sahip. "
+            f"Manipülasyon riski %{risk_score:.1f} olarak hesaplandığından, yatırımcıların bu içerikteki 'Hype' faktörünü göz önünde bulundurması tavsiye edilir."
+        )
+
+    except Exception as e:
+        st.error(f"Sistem Hatası Oluştu: {e}")
+
+else:
+    st.info("Analizi başlatmak için sol paneldeki bilgileri doldurup 'Analizi Başlat' butonuna tıklayınız.")
