@@ -2,140 +2,112 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
 import joblib
 import re
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+import os
 
-# --- SAYFA AYARLARI ---
-st.set_page_config(page_title="Reddit Financial Intelligence", layout="wide", page_icon="📊")
+# --- 1. NLP VE MODEL KURULUMU ---
+def setup_vader():
+    try:
+        from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+    except ImportError:
+        os.system('pip install vaderSentiment')
+        from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+    return SentimentIntensityAnalyzer()
 
-# --- 1. ARAÇLAR VE MODEL YÜKLEME ---
+vader_analyzer = setup_vader()
+
 @st.cache_resource
-def load_assets():
-    vader = SentimentIntensityAnalyzer()
+def load_ml_assets():
     try:
         model = joblib.load('final_reddit_model.pkl')
         features = joblib.load('final_features.pkl')
+        return model, features
     except:
-        model, features = None, None
-    return vader, model, features
+        return None, None
 
-vader, model, model_features = load_assets()
+model, model_features = load_ml_assets()
 
-# --- 2. ANALİZ BAŞLIKLARINA GÖRE ÖRNEK VERİ ÜRETİCİ (EDA İÇİN) ---
-# Gerçek verilerini BigQuery'den çektiğinde bu kısmı 'full_df' ile değiştirebilirsin.
+# --- 2. SAYFA TASARIMI ---
+st.set_page_config(page_title="Reddit Finance Hub", layout="wide")
+st.title("📈 Reddit Yatırım Toplulukları Analiz Merkezi")
+
+# Tab isimlerini senin istediğin başlıklara göre düzenledim
+tab_tahmin, tab_zaman, tab_icerik, tab_hype = st.tabs([
+    "🧠 Etkileşim Tahmini", 
+    "🕒 Zaman Analizi", 
+    "🎥 İçerik Tipi & Kalite", 
+    "🚨 Hype & Anomali Tespiti"
+])
+
+# --- ÖRNEK VERİ SETİ (Hata almamak için sütunları eşitliyoruz) ---
 @st.cache_data
-def get_analysis_data():
-    subreddits = ["finance", "forex", "gme", "investing", "options", "pennystocks", "stocks", "wallstreetbets"]
-    n = 1000
+def get_clean_data():
+    sub_list = ["finance", "forex", "gme", "investing", "options", "pennystocks", "stocks", "wallstreetbets"]
+    n = 500
     df = pd.DataFrame({
-        'subreddit': np.random.choice(subreddits, n),
+        'subreddit': np.random.choice(sub_list, n),
+        'score': np.random.randint(1, 5000, n),
+        'upvote_ratio': np.random.uniform(0.6, 1.0, n),
         'saat': np.random.randint(0, 24, n),
-        'gun': np.random.choice(['Monday', 'Wednesday', 'Friday', 'Sunday'], n),
-        'score': np.random.exponential(500, n),
-        'upvote_ratio': np.random.uniform(0.5, 1.0, n),
-        'sentiment_score': np.random.uniform(-1, 1, n),
-        'hype_count': np.random.randint(0, 10, n),
         'is_video': np.random.choice([0, 1], n),
-        'title_len': np.random.randint(10, 200, n)
+        'baslik_uzunlugu': np.random.randint(10, 250, n),
+        'sentiment_score': np.random.uniform(-1, 1, n),
+        'hype_count': np.random.randint(0, 8, n),
+        'num_comments': np.random.randint(5, 1000, n)
     })
     return df
 
-eda_df = get_analysis_data()
+data = get_clean_data()
 
-# --- 3. ÜST PANEL & NAVİGASYON ---
-st.title("📈 Reddit Yatırım Toplulukları Analiz Merkezi")
-st.markdown("Veri Kaynağı: *BigQuery Reddit Financial Datasets*")
-
-tab1, tab2, tab3 = st.tabs(["🧠 Tahmin Motoru", "📊 Keşifsel Analiz (EDA)", "🚨 Hype & Anomali Tespiti"])
-
-# --- TAB 1: TAHMİN MOTORU (Senin Analiz Sayfan) ---
-with tab1:
-    st.header("🧠 Gönderi Etkileşim Tahmini")
-    col_input, col_result = st.columns([1, 1])
+# --- SEKME 1: ETKİLEŞİM TAHMİNİ ---
+with tab_tahmin:
+    st.subheader("⭐ Gönderi Etkileşim Analizi")
+    utitle = st.text_input("Analiz edilecek başlık:", "GME to the moon! 🚀")
     
-    with col_input:
-        user_title = st.text_area("Gönderi Başlığını Girin:", "GME is going to the moon! 🚀🚀🚀 #ShortSqueeze")
-        selected_sub = st.selectbox("Subreddit Seçin:", eda_df['subreddit'].unique())
-        post_hour = st.slider("Paylaşım Saati:", 0, 23, 14)
-        predict_btn = st.button("Analiz Et & Tahmin Yap")
+    if st.button("Analiz Et"):
+        v_score = vader_analyzer.polarity_scores(utitle)['compound']
+        st.write(f"**Duygu Skoru:** {v_score:.2f}")
+        # Model tahmini buraya eklenebilir
 
-    if predict_btn:
-        # Özellikleri hesapla
-        v_score = vader.polarity_scores(user_title)['compound']
-        emojis = len(re.findall(r'[^\w\s,.]', user_title))
-        hype = sum(1 for w in ['moon', 'rocket', 'yolo', 'squeeze'] if w in user_title.lower())
-        
-        with col_result:
-            st.subheader("Analiz Sonuçları")
-            res_c1, res_c2 = st.columns(2)
-            res_c1.metric("Duygu Skoru", f"{v_score:.2f}")
-            res_c2.metric("Emoji Sayısı", emojis)
-            
-            # Risk Barı
-            risk = min((hype * 20) + (emojis * 10), 100)
-            st.write(f"**Manipülasyon / Hype Riski:** %{risk}")
-            st.progress(risk/100)
-            
-            if model:
-                st.info("🤖 Model Tahmini: Hesaplanıyor...")
-                # Buraya model.predict mantığı gelecek (Önceki kodundaki gibi)
-            else:
-                st.warning("⚠️ Model dosyası bulunamadı, sadece kural tabanlı analiz gösteriliyor.")
+# --- SEKME 2: ZAMAN ANALİZİ (Senin 1. Başlığın) ---
+with tab_zaman:
+    st.subheader("🕒 Günün Saatlerine Göre Etkileşim")
+    # Gruplanmış veri ile çizgi grafik
+    hourly_avg = data.groupby('saat')['score'].mean().reset_index()
+    fig_time = px.line(hourly_avg, x='saat', y='score', markers=True, 
+                       title="Saatlik Ortalama Beğeni (Score) Yoğunluğu",
+                       template="plotly_dark")
+    st.plotly_chart(fig_time, use_container_width=True)
 
-# --- TAB 2: KEŞİFSEL VERİ ANALİZİ (EDA) ---
-with tab2:
-    st.header("🔍 Topluluk Davranış Analizi")
-    
-    # Senin Başlığın 1: Zaman Analizi
-    st.subheader("1-) Zaman ve Etkileşim Analizi")
+# --- SEKME 3: İÇERİK TİPİ VE KALİTE (Senin 2. ve 3. Başlığın) ---
+with tab_icerik:
     c1, c2 = st.columns(2)
     with c1:
-        fig_hour = px.line(eda_df.groupby('saat')['score'].mean().reset_index(), 
-                           x='saat', y='score', title="Saatlik Ortalama Etkileşim",
-                           template="plotly_dark", line_shape="spline")
-        st.plotly_chart(fig_hour, use_container_width=True)
+        st.subheader("📊 Popülarite Kalitesi (Upvote Ratio)")
+        fig_up = px.histogram(data, x="upvote_ratio", nbins=20, 
+                              title="Topluluk Kalite Eşikleri", color_discrete_sequence=['#00CC96'])
+        st.plotly_chart(fig_up, use_container_width=True)
+    
     with c2:
-        fig_day = px.bar(eda_df.groupby('gun')['score'].median().reset_index(), 
-                         x='gun', y='score', title="Günlük Etkileşim Yoğunluğu (Medyan)",
-                         color='score', color_continuous_scale="Viridis")
-        st.plotly_chart(fig_day, use_container_width=True)
+        st.subheader("🎥 İçerik Türü Etkisi")
+        # HATALI KISIM DÜZELTİLDİ: 'not_ched' silindi, 'notched' eklendi
+        fig_box = px.box(data, x="is_video", y="score", color="is_video",
+                         title="Video vs Metin İçerik Skoru",
+                         notched=False, points="all", template="plotly_dark")
+        st.plotly_chart(fig_box, use_container_width=True)
 
-    # Senin Başlığın 3: İçerik Tipi Etkisi
-    st.subheader("2-) İçerik Tipi ve Uzunluk Etkisi")
-    c3, c4 = st.columns(2)
-    with c3:
-        fig_len = px.scatter(eda_df, x="title_len", y="score", color="subreddit",
-                             title="Başlık Uzunluğu vs Skor", size="upvote_ratio",
-                             log_y=True, template="plotly_dark")
-        st.plotly_chart(fig_len, use_container_width=True)
-    with c4:
-        fig_video = px.box(eda_df, x="is_video", y="score", color="is_video",
-                           title="Video İçerik vs Metin İçerik Skoru",
-                           points="all", not_ched=True)
-        st.plotly_chart(fig_video, use_container_width=True)
-
-# --- TAB 3: HYPE & ANOMALİ TESPİTİ ---
-with tab3:
-    st.header("🚨 Hype ve Manipülasyon Denetimi")
+# --- SEKME 4: HYPE VE ANOMALİ (Senin Hype Başlığın) ---
+with tab_hype:
+    st.subheader("🚨 Anomali ve Hype Denetimi")
+    # Başlık uzunluğu dağılımı (Hata veren diğer grafik)
+    fig_dist = px.histogram(data, x='baslik_uzunlugu', 
+                            title="İçerik Uzunluğu Dağılımı",
+                            color_discrete_sequence=['#AB63FA'],
+                            template="plotly_dark")
+    st.plotly_chart(fig_dist, use_container_width=True)
     
-    # Senin Başlığın: Hype Sözlüğü Filtresi
-    col_h1, col_h2 = st.columns([2, 1])
-    
-    with col_h1:
-        st.subheader("Hype ve Duygu Korelasyonu")
-        fig_hype = px.scatter(eda_df, x="sentiment_score", y="hype_count", 
-                              size="score", color="subreddit",
-                              title="Aşırı Pozitiflik vs Hype Kelime Sayısı",
-                              template="plotly_dark")
-        st.plotly_chart(fig_hype, use_container_width=True)
-        
-    with col_h2:
-        st.subheader("🚨 Şüpheli Tablo")
-        suspicious = eda_df[eda_df['hype_count'] > 5].sort_values(by='score', ascending=False)
-        st.dataframe(suspicious[['subreddit', 'score', 'hype_count']], use_container_width=True)
-        st.caption("5'ten fazla hype anahtar kelimesi içeren gönderiler.")
-
-st.divider()
-st.write("🔧 **Sistem Durumu:** Tüm analiz modülleri aktif. | Veri seti: 425,681 satır")
+    st.subheader("🔍 Şüpheli Hype Kelime Dağılımı")
+    fig_hype = px.scatter(data, x="sentiment_score", y="hype_count", size="score", 
+                          color="subreddit", title="Duygu vs Hype Yoğunluğu")
+    st.plotly_chart(fig_hype, use_container_width=True)
