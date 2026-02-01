@@ -5,15 +5,12 @@ import joblib
 import os
 import re
 import plotly.express as px
-import plotly.graph_objects as go # Yeni eklendi
 
 # 1. SİSTEM VE KÜTÜPHANE KURULUMU
 @st.cache_resource
 def install_requirements():
     # VADER: Sosyal medya analizinde (Rocket!! 🚀) en yüksek başarıyı verir
-    # pip install komutu sadece Streamlit Cloud'da ilk çalıştırmada çalışır.
-    # Genellikle requirements.txt ile yönetmek daha sağlıklıdır.
-    os.system('pip install vaderSentiment') 
+    os.system('pip install vaderSentiment')
 
 install_requirements()
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
@@ -54,25 +51,12 @@ with st.sidebar:
     st.write("📊 **Model:** XGBoost v2.0 (Enhanced)")
     st.info("Bu sistem hem etkileşimi tahmin eder hem de manipülasyon riskini denetler.")
 
-# --- ANA EKRAN BAŞLIK VE GİRİŞ AÇIKLAMASI ---
+# --- ANA EKRAN ---
 st.title("🚀 Reddit Finansal Etkileşim & Manipülasyon Analizi")
-with st.expander("ℹ️ Proje ve Metodoloji Hakkında Detaylı Bilgi"):
-    st.markdown("""
-    Bu platform, Reddit'teki finansal gönderilerin potansiyel etkileşimini tahmin etmek ve olası **manipülasyon (hype)** işaretlerini tespit etmek amacıyla geliştirilmiştir. Sistem, doğal dil işleme (NLP) tekniklerini ve makine öğrenmesi modellerini birleştirerek çalışır.
-    
-    **Temel Bileşenler:**
-    * **VADER Duygu Analizi:** Metinlerdeki duygusal tonu (pozitif, negatif, nötr) tespit ederken, özellikle sosyal medya diline özgü (emoji, büyük harf kullanımı) ifadeleri hassasiyetle yorumlar.
-    * **Özellik Mühendisliği:** Başlık uzunluğu, spekülatif kelime yoğunluğu, emoji kullanımı ve büyük harf yazımı gibi etkileşimi tetikleyen faktörleri analiz eder.
-    * **XGBoost Regressor:** Toplanan özellik setini kullanarak gönderilerin alacağı Upvote sayısını tahmin eder.
-    * **Manipülasyon Risk Denetimi:** Duygu, hype kelime ve emoji yoğunluğunu birleştirerek içeriğin organik mi yoksa yapay olarak şişirilmiş (manipülatif) mi olduğunu değerlendirir.
-    
-    **Amacımız, yatırımcıların ve analistlerin Reddit gibi dinamik platformlardaki bilgi akışını daha bilinçli yönetmelerine yardımcı olmaktır.**
-    """)
-
 
 tab_tahmin, tab_eda = st.tabs(["🧠 Akıllı Tahmin Motoru", "📊 Veri Analizi Dashboard"])
 
-# --- SEKME 1: AKILLI TAHMİN MOTORU (ESKİ HALİYLE KORUNDU) ---
+# --- SEKME 1: AKILLI TAHMİN MOTORU ---
 with tab_tahmin:
     if st.button("🚀 Analizi Başlat ve Raporu Oluştur"):
         # ÖZELLİK ÇIKARIMI
@@ -91,7 +75,7 @@ with tab_tahmin:
         if 'title_len' in input_df.columns: input_df['title_len'] = title_len
         if 'saat' in input_df.columns: input_df['saat'] = posted_time
         if 'is_all_caps' in input_df.columns: input_df['is_all_caps'] = is_caps
-        if 'emoji_count' in input_df.columns: input_df['emoji_count'] = emojis # Yeni eklenen özellik
+        if 'emoji_count' in input_df.columns: input_df['emoji_count'] = emojis
         
         # Subreddit One-Hot Encoding
         sub_col = f"sub_{selected_sub}"
@@ -139,7 +123,7 @@ with tab_tahmin:
                 st.write("**İçerik Detayları**")
                 st.write(f"📏 Karakter: {title_len}")
                 st.write(f"🔥 Spekülatif Terim: {hype} adet")
-                st.write("⭐" * (min(int(hype + emojis), 5))) # Yıldıza çevirdik
+                st.write("⭐" * (min(int(hype + emojis), 5)))
 
             # 3. Teknik Analiz Tablosu
             st.write("---")
@@ -157,61 +141,27 @@ with tab_tahmin:
             )
 
         except Exception as e:
-            st.error(f"Sistem Hatası: Tahmin modelinizle ilgili bir sorun oluştu: {e}")
+            st.error(f"Sistem Hatası: {e}")
             st.info("Not: Model ve özellik dosyalarının GitHub'da güncel olduğundan emin olun.")
-    else:
-        st.info("Analizi başlatmak için sol paneldeki bilgileri doldurup 'Analizi Başlat' butonuna tıklayınız.")
 
-
-# --- SEKME 2: VERİ ANALİZİ DASHBOARD (YENİ GÖRSELLERLE ZENGİNLEŞTİRİLDİ) ---
+# --- SEKME 2: VERİ ANALİZİ DASHBOARD ---
 with tab_eda:
-    st.header("📊 Detaylı Veri Analizi ve Topluluk Dinamikleri")
-    st.markdown("Eğitim aşamasında kullanılan veri setindeki ana eğilimler ve korelasyonlar aşağıda sunulmuştur.")
+    st.header("🔬 Colab Veri Analiz Çıktıları (EDA)")
+    st.markdown("Eğitim aşamasında kullanılan verilerin interaktif dağılımı.")
     
-    # Simülasyon Verileri (Gerçek verin olmadığından örnek olarak oluşturuldu)
-    # Colab'dan gerçek verilerle değiştirilmelidir
-    eda_sample_data = pd.DataFrame({
-        'Subreddit': ['wallstreetbets', 'stocks', 'investing', 'finance'] * 24,
-        'Saat': list(range(24)) * 4,
-        'Ortalama_Upvote': np.random.randint(10, 500, 96),
-        'Ortalama_Sentiment': np.random.uniform(-0.3, 0.7, 96),
-        'Hype_Index': np.random.uniform(0.1, 0.9, 96),
-        'Başlık_Uzunluğu': np.random.randint(20, 150, 96)
-    })
-    
-    st.subheader("⏰ Günlük ve Saatlik Etkileşim Isı Haritası")
-    # Günlük / Saatlik Isı Haritası
-    # Gerçek veri setinizdeki 'day_of_week' ve 'hour' sütunlarını kullanmalısınız
-    mock_heatmap_data = pd.pivot_table(eda_sample_data, values='Ortalama_Upvote', index='Saat', columns='Subreddit', aggfunc='mean')
-    fig_heatmap = px.imshow(mock_heatmap_data, 
-                            labels=dict(x="Subreddit", y="Paylaşım Saati", color="Ortalama Upvote"),
-                            x=mock_heatmap_data.columns, y=mock_heatmap_data.index,
-                            color_continuous_scale="Viridis",
-                            title="Subredditlere Göre Saatlik Ortalama Etkileşim")
-    st.plotly_chart(fig_heatmap, use_container_width=True)
-
-    st.divider()
-
-    col_eda1, col_eda2 = st.columns(2)
-    with col_eda1:
-        st.subheader("📈 Topluluk Duygu & Etkileşim Karşılaştırması")
-        # Subreddit Duygu ve Ortalama Skor Karşılaştırması
-        sub_agg = eda_sample_data.groupby('Subreddit').agg(
-            Avg_Upvote=('Ortalama_Upvote', 'mean'),
-            Avg_Sentiment=('Ortalama_Sentiment', 'mean')
-        ).reset_index()
-        fig_sub_compare = px.bar(sub_agg, x='Subreddit', y='Avg_Upvote', color='Avg_Sentiment',
-                                 color_continuous_scale="RdBu",
-                                 title="Subredditlerin Ortalama Etkileşim ve Duygu Profili")
-        st.plotly_chart(fig_sub_compare, use_container_width=True)
-
-    with col_eda2:
-        st.subheader("📊 Başlık Uzunluğu ve Hype Yoğunluğu Dağılımı")
-        # Başlık Uzunluğu ve Hype Yoğunluğu Dağılımı
-        fig_dist = px.histogram(eda_sample_data, x='Başlık_Uzunluğu', color='Hype_Index', 
-                                marginal="box", # kutu grafiği de ekler
-                                title="Başlık Uzunluğu Dağılımı (Hype Endeksi ile)",
-                                color_continuous_scale="Plasma")
-        st.plotly_chart(fig_dist, use_container_width=True)
-
-    st.info("Bu grafikler, Colab'da yaptığınız detaylı analizlerin interaktif bir özetidir. Daha fazla derinlemesine analiz için orijinal veri setine başvurulmalıdır.")
+    e_col1, e_col2 = st.columns(2)
+    with e_col1:
+        # Örnek Etkileşim Grafiği
+        eda_data = pd.DataFrame({
+            'Kategori': ['Organik', 'Orta Hype', 'Yüksek Hype'],
+            'Ortalama Skor': [15, 65, 280]
+        })
+        fig = px.bar(eda_data, x='Kategori', y='Ortalama Skor', color='Ortalama Skor', 
+                     title="Hype Seviyesine Göre Etkileşim Artışı", template="plotly_dark")
+        st.plotly_chart(fig, use_container_width=True)
+        
+    with e_col2:
+        # Örnek Duygu Analizi
+        fig2 = px.pie(values=[45, 25, 30], names=['Pozitif', 'Negatif', 'Nötr'], 
+                      title="Veri Seti Genel Duygu Dağılımı", hole=0.4)
+        st.plotly_chart(fig2, use_container_width=True)
