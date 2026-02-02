@@ -80,11 +80,14 @@ with st.sidebar:
     user_title = st.text_input("Gönderi Başlığı:", "GME to the moon! 🚀🚀🚀")
     selected_sub = st.selectbox("Subreddit Seçin:", subreddit_listesi)
     posted_time = st.slider("Paylaşım Saati (0-23):", 0, 23, 15)
-    st.divider()
     
-    st.write(f"🎯 **Hedef Doğruluk (R²):** %{model_metrics['accuracy']:.1f}")
-    st.write("📊 **Model:** XGBoost v2.0 (Enhanced)")
-    st.info("Bu sistem hem etkileşimi tahmin eder hem de manipülasyon riskini denetler.")
+    st.divider()
+    # Colab verilerini yansıtan şık metrikler
+    st.write("### 📊 Model Performansı")
+    st.metric("R² Skoru (Başarı)", f"%{model_metrics['accuracy']:.1f}")
+    st.caption("Eğitim sonrası doğrulama verisindeki başarı oranıdır.")
+    st.write("📈 **Model:** XGBoost v2.0")
+    
 
 # --- ANA EKRAN ---
 st.title("🚀 Reddit Finansal Etkileşim & Manipülasyon Analizi")
@@ -221,3 +224,4 @@ with tab_eda:
     with e_col2:
         fig2 = px.pie(values=[45, 25, 30], names=['Pozitif', 'Negatif', 'Nötr'], title="Veri Seti Genel Duygu Dağılımı", hole=0.4)
         st.plotly_chart(fig2, use_container_width=True)
+
