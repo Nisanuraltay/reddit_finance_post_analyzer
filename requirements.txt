@@ -8,5 +8,6 @@ textblob
 vaderSentiment
 plotly
 matplotlib
+wordcloud
 
 
