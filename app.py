@@ -42,63 +42,62 @@ def get_hype_count(text):
 def generate_hype_cloud(text):
     found_words = [word.upper() for word in text.split() if word.lower() in HYPE_WORDS]
     if found_words:
-        # Arka plan rengini Streamlit koyu temasıyla (#0e1117) birebir eşitledik
+        # Beyaz arka plan ve profesyonel turuncu-kırmızı palet (YlOrRd)
         wc = WordCloud(
-            width=600, height=300, 
-            background_color='#0e1117', 
-            colormap='autumn', 
-            max_font_size=90, 
-            min_font_size=20,
-            mode="RGB"
+            width=800, height=400, 
+            background_color='white', 
+            colormap='YlOrRd', 
+            max_font_size=100, 
+            min_font_size=10
         ).generate(" ".join(found_words))
         
-        # Grafik çerçevesini (figure) ve eksenleri (axis) tamamen yok ediyoruz
-        fig, ax = plt.subplots(figsize=(6, 3))
-        fig.patch.set_facecolor('#0e1117') # Dış çerçeve rengini siliyoruz
-        ax.set_facecolor('#0e1117')       # İç çerçeve rengini siliyoruz
-        
+        fig, ax = plt.subplots(figsize=(10, 5))
+        fig.patch.set_facecolor('white')
+        ax.set_facecolor('white')
         ax.imshow(wc, interpolation='bilinear')
-        ax.axis("off") # Siyah çizgileri ve sayıları kaldırır
-        
-        plt.subplots_adjust(left=0, right=1, top=1, bottom=0) # Kenar boşluklarını sıfırlar
+        ax.axis("off")
+        plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
         return fig
     return None
 
-# --- ARAYÜZ AYARLARI ---
+# --- ARAYÜZ KONFİGÜRASYONU & BEYAZ TEMA CSS ---
 st.set_page_config(page_title="Reddit Finance AI", layout="wide", page_icon="📈")
 
-# Metric kutularındaki çerçeveleri de yumuşatıyoruz
 st.markdown("""
     <style>
+    /* Beyaz Tema ve Temiz Fontlar */
+    .stApp { background-color: white; color: #1E1E1E; }
     div[data-testid="stMetric"] { 
-        background-color: transparent; 
-        padding: 10px; 
-        border: none; 
-        border-bottom: 1px solid rgba(255, 75, 75, 0.2); 
+        background-color: #F8F9FA; 
+        padding: 15px; 
+        border-radius: 12px; 
+        border: 1px solid #E0E0E0; 
     }
     .stButton>button { 
         width: 100%; 
-        border-radius: 20px; 
+        border-radius: 25px; 
+        font-weight: bold; 
         background-color: #FF4B4B; 
         color: white; 
+        height: 3em; 
         border: none;
-        transition: 0.3s;
     }
-    .stButton>button:hover { background-color: #ff3333; }
-    /* Plotly ve Matplotlib kaplarını temizle */
-    .stPlotlyChart { border: none !important; }
+    .stTextInput>div>div>input { background-color: #F8F9FA; }
+    hr { border-top: 1px solid #E0E0E0; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- SIDEBAR ---
+# --- SIDEBAR (KORUNDU) ---
 with st.sidebar:
     st.header("🔍 Giriş Parametreleri")
     user_title = st.text_input("Gönderi Başlığı:", "GME to the moon! 🚀🚀🚀")
     selected_sub = st.selectbox("Subreddit Seçin:", subreddit_listesi)
     posted_time = st.slider("Paylaşım Saati (0-23):", 0, 23, 15)
+    
     st.divider()
     st.write("### 📊 Model Performansı")
     st.metric("R² Skoru (Başarı)", f"%{model_metrics['accuracy']:.1f}")
+    st.caption("Eğitim sonrası doğrulama verisindeki başarı oranıdır.")
     st.write("📈 **Model:** XGBoost v2.0")
 
 # --- ANA EKRAN ---
@@ -110,52 +109,45 @@ if st.button("🚀 Analizi Başlat"):
     emojis = get_emoji_count(user_title)
     title_len = len(user_title)
     
-    # Model Tahmini
+    # Model Tahmini & Dinamik Puanlama
     if model:
         input_df = pd.DataFrame(0, index=[0], columns=model_features)
         for col in input_df.columns:
             if 'sentiment' in col: input_df[col] = v_sentiment
             if 'hype' in col: input_df[col] = hype
             if 'len' in col: input_df[col] = title_len
-        
         pred = np.expm1(model.predict(input_df)[0])
-        final_score = pred if pred > 1 else (hype * 8 + emojis * 3 + title_len * 0.2)
+        final_score = pred if pred > 1 else (hype * 10 + emojis * 2 + title_len * 0.1)
     else:
         final_score = (hype * 15)
 
     risk = min((hype * 30) + (emojis * 10), 100)
 
     # ÜST METRİKLER
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Tahmini Upvote", f"{int(final_score)} ↑")
-    col2.metric("Duygu Skoru", f"{v_sentiment:.2f}")
-    col3.metric("Hype Seviyesi", "Yüksek" if hype > 0 else "Normal")
+    st.divider()
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Tahmini Upvote", f"{int(final_score)} ↑")
+    c2.metric("Duygu Skoru", f"{v_sentiment:.2f}")
+    c3.metric("Hype Seviyesi", "Yüksek" if hype > 0 else "Normal")
 
+    # RİSK ANALİZİ
     st.write("---")
-    
-    # RİSK ÇUBUĞU
     st.write(f"### Tahmin Edilen Manipülasyon Riski: %{risk:.1f}")
     st.progress(risk / 100)
     
-    if risk > 60:
-        st.error(f"🚨 **Yüksek Hype Tespiti:** Spekülatif içerik saptandı.")
-    else:
-        st.success("✅ **Organik Etkileşim:** Gönderi doğal bir profil çiziyor.")
+    if risk > 60: st.error("🚨 **Yüksek Hype Tespiti:** Spekülatif içerik saptandı.")
+    else: st.success("✅ **Organik Etkileşim:** Gönderi doğal bir profil çiziyor.")
 
+    # DERİNLEMESİNE ANALİZ
     st.write("---")
-    
-    # ANALİZ GRAFİKLERİ
     st.subheader("🔍 Derinlemesine Analiz & Kıyaslama")
-    g1, g2 = st.columns([1, 1])
+    g1, g2 = st.columns(2)
 
     with g1:
         st.write("**🔥 Hype Odak Noktası**")
         cloud_fig = generate_hype_cloud(user_title)
-        if cloud_fig:
-            # Matplotlib figürünü basarken arka plan rengini koru
-            st.pyplot(cloud_fig, clear_figure=True)
-        else:
-            st.info("Belirgin bir hype kelimesi saptanmadı.")
+        if cloud_fig: st.pyplot(cloud_fig)
+        else: st.info("Hype kelimesi bulunamadı.")
 
     with g2:
         st.write("**⏰ Zamanlama Etkisi (Küresel Trafik)**")
@@ -164,19 +156,18 @@ if st.button("🚀 Analizi Başlat"):
         
         fig_time = go.Figure()
         fig_time.add_trace(go.Scatter(x=hours, y=traffic, fill='tozeroy', line_color='#FF4B4B', name='Trafik'))
-        fig_time.add_vline(x=posted_time, line_width=2, line_dash="dash", line_color="white")
+        fig_time.add_vline(x=posted_time, line_width=2, line_dash="dash", line_color="#1E1E1E")
         
         fig_time.update_layout(
-            paper_bgcolor='rgba(0,0,0,0)', # Çerçeveyi transparan yapar
-            plot_bgcolor='rgba(0,0,0,0)',  # Grafik içini transparan yapar
-            template="plotly_dark", height=250, margin=dict(l=10, r=10, t=10, b=10),
-            xaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
-            yaxis=dict(showgrid=False)
+            paper_bgcolor='white', plot_bgcolor='white',
+            margin=dict(l=10, r=10, t=10, b=10), height=250,
+            xaxis=dict(title="Saat", color="#1E1E1E", showgrid=False),
+            yaxis=dict(showgrid=False, showticklabels=False)
         )
-        st.plotly_chart(fig_time, use_container_width=True, config={'displayModeBar': False})
+        st.plotly_chart(fig_time, use_container_width=True)
 
-    # ÖZET DEĞERLENDİRME
-    st.write("---")
+    # ÖZET DEĞERLENDİRME (İSTEDİĞİN FORMAT)
+    st.divider()
     st.chat_message("assistant").write(
         f"**Özet Değerlendirme:** Bu gönderi **{selected_sub}** topluluğunda yaklaşık **{int(final_score)} upvote** alma potansiyeline sahip. "
         f"Manipülasyon riski **%{risk:.1f}** seviyesindedir."
