@@ -42,30 +42,51 @@ def get_hype_count(text):
 def generate_hype_cloud(text):
     found_words = [word.upper() for word in text.split() if word.lower() in HYPE_WORDS]
     if found_words:
-        # Daha zarif renkler ve boyutlandırma
+        # Arka plan rengini Streamlit koyu temasıyla (#0e1117) birebir eşitledik
         wc = WordCloud(
             width=600, height=300, 
             background_color='#0e1117', 
-            colormap='autumn', # Daha yumuşak geçişli bir palet
-            max_font_size=100, # Kelimenin aşırı devleşmesini engeller
-            min_font_size=20
+            colormap='autumn', 
+            max_font_size=90, 
+            min_font_size=20,
+            mode="RGB"
         ).generate(" ".join(found_words))
         
-        fig, ax = plt.subplots(figsize=(6, 3), facecolor='#0e1117')
+        # Grafik çerçevesini (figure) ve eksenleri (axis) tamamen yok ediyoruz
+        fig, ax = plt.subplots(figsize=(6, 3))
+        fig.patch.set_facecolor('#0e1117') # Dış çerçeve rengini siliyoruz
+        ax.set_facecolor('#0e1117')       # İç çerçeve rengini siliyoruz
+        
         ax.imshow(wc, interpolation='bilinear')
-        ax.axis("off")
-        plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+        ax.axis("off") # Siyah çizgileri ve sayıları kaldırır
+        
+        plt.subplots_adjust(left=0, right=1, top=1, bottom=0) # Kenar boşluklarını sıfırlar
         return fig
     return None
 
 # --- ARAYÜZ AYARLARI ---
 st.set_page_config(page_title="Reddit Finance AI", layout="wide", page_icon="📈")
 
+# Metric kutularındaki çerçeveleri de yumuşatıyoruz
 st.markdown("""
     <style>
-    div[data-testid="stMetric"] { background-color: rgba(128, 128, 128, 0.05); padding: 15px; border-radius: 12px; border: 1px solid rgba(128, 128, 128, 0.1); }
-    .stButton>button { width: 100%; border-radius: 20px; background-color: #FF4B4B; color: white; border: none; }
-    .status-box { padding: 15px; border-radius: 10px; margin-bottom: 20px; }
+    div[data-testid="stMetric"] { 
+        background-color: transparent; 
+        padding: 10px; 
+        border: none; 
+        border-bottom: 1px solid rgba(255, 75, 75, 0.2); 
+    }
+    .stButton>button { 
+        width: 100%; 
+        border-radius: 20px; 
+        background-color: #FF4B4B; 
+        color: white; 
+        border: none;
+        transition: 0.3s;
+    }
+    .stButton>button:hover { background-color: #ff3333; }
+    /* Plotly ve Matplotlib kaplarını temizle */
+    .stPlotlyChart { border: none !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -92,14 +113,13 @@ if st.button("🚀 Analizi Başlat"):
     # Model Tahmini
     if model:
         input_df = pd.DataFrame(0, index=[0], columns=model_features)
-        # Basitleştirilmiş özellik eşleme
         for col in input_df.columns:
             if 'sentiment' in col: input_df[col] = v_sentiment
             if 'hype' in col: input_df[col] = hype
             if 'len' in col: input_df[col] = title_len
         
         pred = np.expm1(model.predict(input_df)[0])
-        final_score = pred if pred > 0.5 else (hype * 10 + emojis * 2)
+        final_score = pred if pred > 1 else (hype * 8 + emojis * 3 + title_len * 0.2)
     else:
         final_score = (hype * 15)
 
@@ -118,9 +138,9 @@ if st.button("🚀 Analizi Başlat"):
     st.progress(risk / 100)
     
     if risk > 60:
-        st.error(f"🚨 **Yüksek Hype Tespiti:** Spekülatif içerik ve aşırı emoji kullanımı saptandı.")
+        st.error(f"🚨 **Yüksek Hype Tespiti:** Spekülatif içerik saptandı.")
     else:
-        st.success("✅ **Organik Etkileşim:** Gönderi doğal bir paylaşım profili çiziyor.")
+        st.success("✅ **Organik Etkileşim:** Gönderi doğal bir profil çiziyor.")
 
     st.write("---")
     
@@ -132,37 +152,31 @@ if st.button("🚀 Analizi Başlat"):
         st.write("**🔥 Hype Odak Noktası**")
         cloud_fig = generate_hype_cloud(user_title)
         if cloud_fig:
-            st.pyplot(cloud_fig)
+            # Matplotlib figürünü basarken arka plan rengini koru
+            st.pyplot(cloud_fig, clear_figure=True)
         else:
             st.info("Belirgin bir hype kelimesi saptanmadı.")
 
     with g2:
         st.write("**⏰ Zamanlama Etkisi (Küresel Trafik)**")
-        # Daha dinamik ve anlaşılır Plotly grafiği
         hours = list(range(24))
         traffic = [15, 8, 5, 3, 4, 10, 25, 45, 60, 75, 85, 95, 105, 115, 125, 135, 145, 155, 170, 185, 180, 160, 140, 90]
         
         fig_time = go.Figure()
         fig_time.add_trace(go.Scatter(x=hours, y=traffic, fill='tozeroy', line_color='#FF4B4B', name='Trafik'))
-        # Kullanıcının seçtiği saati dikey çizgi ile göster
-        fig_time.add_vline(x=posted_time, line_width=3, line_dash="dash", line_color="white")
-        fig_time.add_annotation(x=posted_time, y=max(traffic), text="Sizin Saatiniz", showarrow=False, yshift=10)
+        fig_time.add_vline(x=posted_time, line_width=2, line_dash="dash", line_color="white")
         
         fig_time.update_layout(
-            template="plotly_dark", height=300, margin=dict(l=20, r=20, t=20, b=20),
-            xaxis=dict(title="Saat (24s)"), yaxis=dict(title="Etkileşim Yoğunluğu")
+            paper_bgcolor='rgba(0,0,0,0)', # Çerçeveyi transparan yapar
+            plot_bgcolor='rgba(0,0,0,0)',  # Grafik içini transparan yapar
+            template="plotly_dark", height=250, margin=dict(l=10, r=10, t=10, b=10),
+            xaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
+            yaxis=dict(showgrid=False)
         )
-        st.plotly_chart(fig_time, use_container_width=True)
+        st.plotly_chart(fig_time, use_container_width=True, config={'displayModeBar': False})
 
-    # TEKNİK TABLO VE ÖZET (İSTEDİĞİN FORMAT)
-    st.write("### 📋 Teknik Analiz Tablosu")
-    tech_data = {
-        "Parametre": ["VADER Skoru", "Hype Kelime", "Emoji Sayısı", "Büyük Harf", "Hedef Subreddit"],
-        "Değer": [f"{v_sentiment:.4f}", hype, emojis, "Evet" if user_title.isupper() else "Hayır", selected_sub]
-    }
-    st.table(pd.DataFrame(tech_data))
-
-    # Özet Değerlendirme Metni
+    # ÖZET DEĞERLENDİRME
+    st.write("---")
     st.chat_message("assistant").write(
         f"**Özet Değerlendirme:** Bu gönderi **{selected_sub}** topluluğunda yaklaşık **{int(final_score)} upvote** alma potansiyeline sahip. "
         f"Manipülasyon riski **%{risk:.1f}** seviyesindedir."
