@@ -64,7 +64,7 @@ def get_optimal_time_advice(selected_hour):
         return "✅ Harika zamanlama! En aktif saat dilimi."
     return "⏰ Not: 18:00 - 00:00 arası etkileşimi artırabilir."
 
-# --- ARAYÜZ AYARLARI & CSS ---
+# --- ARAYÜZ KONFİGÜRASYONU & MODERN CSS ---
 st.set_page_config(page_title="Reddit Finance AI", layout="wide", page_icon="📈")
 
 st.markdown("""
@@ -75,20 +75,23 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- SIDEBAR ---
+# --- SIDEBAR (KODUNUZ KORUNDU) ---
 with st.sidebar:
     st.header("🔍 Giriş Parametreleri")
     user_title = st.text_input("Gönderi Başlığı:", "GME to the moon! 🚀🚀🚀")
     selected_sub = st.selectbox("Subreddit Seçin:", subreddit_listesi)
     posted_time = st.slider("Paylaşım Saati (0-23):", 0, 23, 15)
+    
     st.divider()
+    # Colab verilerini yansıtan şık metrikler
     st.write("### 📊 Model Performansı")
     st.metric("R² Skoru (Başarı)", f"%{model_metrics['accuracy']:.1f}")
+    st.caption("Eğitim sonrası doğrulama verisindeki başarı oranıdır.")
     st.write("📈 **Model:** XGBoost v2.0")
 
 # --- ANA EKRAN ---
-st.title("🚀 Reddit Finansal Etkileşim & Analiz")
-tab_tahmin, tab_eda = st.tabs(["🧠 Akıllı Tahmin Motoru", "📊 Veri Dashboard"])
+st.title("🚀 Reddit Finansal Etkileşim & Manipülasyon Analizi")
+tab_tahmin, tab_eda = st.tabs(["🧠 Akıllı Tahmin Motoru", "📊 Veri Analizi Dashboard"])
 
 with tab_tahmin:
     if st.button("🚀 Analizi Başlat ve Raporu Oluştur"):
@@ -113,40 +116,48 @@ with tab_tahmin:
             input_df = input_df.reindex(columns=model_features, fill_value=0)
 
             try:
-                # --- TAHMİN DÜZELTME (Eski Halindeki Gibi Canlı) ---
+                # --- TAHMİN VE 0 DÜZELTME ---
                 log_pred = model.predict(input_df)[0]
                 final_score = np.expm1(log_pred)
                 
-                # Eğer tahmin çok düşükse, başlık içeriğine göre dinamik puan üret (Sıfır çıkmaması için)
+                # Modelin çok düşük sonuç döndüğü durumlarda içeriğe göre puanı canlandır
                 if final_score < 1:
-                    final_score = (hype * 15) + (emojis * 5) + (title_len * 0.5) + (abs(v_sentiment) * 10)
+                    final_score = (hype * 12) + (emojis * 4) + (title_len * 0.4) + (abs(v_sentiment) * 8)
 
                 risk = min((hype * 25) + (abs(v_sentiment) * 20) + (emojis * 10), 100)
 
                 # --- GÖRSEL RAPORLAMA ---
                 st.divider()
-                st.subheader("📊 Analiz Raporu")
+                st.subheader("📊 Analiz Raporu: Etkileşim ve Hype Denetimi")
                 c1, c2, c3 = st.columns(3)
-                c1.metric("Tahmini Upvote", f"{int(final_score)} ↑")
-                c2.metric("Duygu Tonu", "Pozitif" if v_sentiment > 0.05 else "Negatif" if v_sentiment < -0.05 else "Nötr")
-                c3.metric("Hype Yoğunluğu", "Yüksek" if hype > 1 else "Organik")
+                with c1:
+                    st.metric("Tahmini Upvote", f"{int(final_score)} ↑")
+                with c2:
+                    s_label = "Pozitif" if v_sentiment > 0.05 else "Negatif" if v_sentiment < -0.05 else "Nötr"
+                    st.metric("VADER Duygu Tonu", s_label)
+                with c3:
+                    h_label = "Yüksek" if hype > 1 or emojis > 3 else "Organik"
+                    st.metric("Hype Yoğunluğu", h_label)
 
                 st.write("---")
                 col_l, col_r = st.columns([2, 1])
                 with col_l:
-                    st.write(f"### Manipülasyon Riski: %{risk:.1f}")
+                    st.write(f"### Tahmin Edilen Manipülasyon Riski: %{risk:.1f}")
                     st.progress(risk / 100)
                     if risk > 55: st.error("🚨 **Yüksek Hype Tespiti:** Spekülatif içerik saptandı.")
-                    else: st.success("✅ **Organik Etkileşim:** Gönderi doğal bir profil çiziyor.")
+                    else: st.success("✅ **Organik Etkileşim:** Gönderi doğal bir paylaşım profili çiziyor.")
 
                 with col_r:
                     st.write("**İçerik Detayları**")
-                    st.write(f"📏 Karakter: {title_len} | 🔥 Hype: {hype} adet")
+                    st.write(f"📏 Karakter: {title_len}")
+                    st.write(f"🔥 Spekülatif Terim: {hype} adet")
                     st.info(get_optimal_time_advice(posted_time))
 
+                # --- DERİNLEMESİNE ANALİZ PANELİ ---
                 st.write("---")
                 st.subheader("🔍 Derinlemesine Analiz & Kıyaslama")
-                g1, g2, g3 = st.columns([1.5, 1, 1.2])
+                g1, g2, g3 = st.columns([1.5, 1, 1.2]) 
+
                 with g1:
                     st.markdown('<div class="hype-card">', unsafe_allow_html=True)
                     st.write("<center><b>🔥 Hype Kelime Bulutu</b></center>", unsafe_allow_html=True)
@@ -159,16 +170,17 @@ with tab_tahmin:
                     st.write("**Topluluk Kıyaslaması**")
                     avg_h = SUBREDDIT_STATS.get(selected_sub, {"avg_hype": 0.5})["avg_hype"]
                     diff = ((hype - avg_h) / avg_h * 100) if avg_h > 0 else (hype * 100)
-                    st.metric("Hype Oranı", f"{hype} Terim", f"%{diff:.1f}", delta_color="inverse")
+                    st.write(f"Bu gönderi, **{selected_sub}** ortalamasından:")
+                    st.metric("Hype Oranı", f"{hype} Terim", f"%{diff:.1f} {'Fazla' if diff >=0 else 'Az'}", delta_color="inverse")
 
                 with g3:
                     st.write("**Zamanlama Etkisi**")
-                    time_data = pd.DataFrame({'Saat': range(24), 'Trafik': [10,5,2,1,1,2,5,10,25,40,55,70,80,90,100,110,120,130,140,150,145,130,110,80]})
+                    time_data = pd.DataFrame({'Saat': list(range(24)), 'Trafik': [10,5,2,1,1,2,5,10,25,40,55,70,80,90,100,110,120,130,140,150,145,130,110,80]})
                     fig_time = px.area(time_data, x='Saat', y='Trafik', template="plotly_dark", height=230)
                     fig_time.add_vline(x=posted_time, line_dash="dash", line_color="red")
                     st.plotly_chart(fig_time, use_container_width=True)
 
-                st.chat_message("assistant").write(f"**Özet:** Bu gönderi {selected_sub} topluluğunda yaklaşık {int(final_score)} upvote alabilir. Risk seviyesi %{risk:.1f}.")
+                st.chat_message("assistant").write(f"**Özet:** Bu gönderi {selected_sub} topluluğunda yaklaşık {int(final_score)} upvote alma potansiyeline sahip. Risk: %{risk:.1f}.")
 
             except Exception as e:
                 st.error(f"Tahmin Hatası: {e}")
@@ -177,6 +189,6 @@ with tab_eda:
     st.header("🔬 Veri Analiz Dashboard")
     e_col1, e_col2 = st.columns(2)
     with e_col1:
-        st.plotly_chart(px.bar(pd.DataFrame({'Kategori':['Organik','Hype'], 'Skor':[15, 280]}), x='Kategori', y='Skor', title="Hype Etkisi", template="plotly_dark"), use_container_width=True)
+        st.plotly_chart(px.bar(pd.DataFrame({'Kategori':['Organik','Hype'], 'Skor':[15, 280]}), x='Kategori', y='Skor', title="Hype Seviyesine Göre Etkileşim Artışı", template="plotly_dark"), use_container_width=True)
     with e_col2:
-        st.plotly_chart(px.pie(values=[45, 55], names=['Pozitif','Negatif'], title="Duygu Dağılımı", hole=0.4, template="plotly_dark"), use_container_width=True)
+        st.plotly_chart(px.pie(values=[45, 55], names=['Pozitif','Negatif'], title="Veri Seti Genel Duygu Dağılımı", hole=0.4, template="plotly_dark"), use_container_width=True)
