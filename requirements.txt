@@ -4,9 +4,8 @@ numpy
 joblib
 plotly
 vaderSentiment
-streamlit-wordcloud==1.0.1
 xgboost
 scikit-learn
-matplotlib
 wordcloud
+matplotlib
 
