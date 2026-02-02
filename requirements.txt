@@ -2,13 +2,10 @@ streamlit
 pandas
 numpy
 joblib
-scikit-learn
-xgboost
-textblob
-vaderSentiment
 plotly
-matplotlib
+vaderSentiment
 streamlit-wordcloud
+xgboost
+scikit-learn
+matplotlib
 wordcloud
-
-
