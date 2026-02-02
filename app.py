@@ -15,12 +15,16 @@ vader_analyzer = SentimentIntensityAnalyzer()
 # 2. MODEL VE ÖZELLİK LİSTESİNİ YÜKLE
 @st.cache_resource
 def load_assets():
-    # Dosya isimlerinin GitHub'dakilerle aynı olduğundan emin olun
     model = joblib.load('final_reddit_model.pkl')
     features = joblib.load('final_features.pkl')
-    return model, features
+    # Metrik dosyasını yükle (Dosya yoksa varsayılan 70 döner)
+    try:
+        metrics = joblib.load('metrics.pkl')
+    except:
+        metrics = {"accuracy": 70.0}
+    return model, features, metrics
 
-model, model_features = load_assets()
+model, model_features, model_metrics = load_assets()
 
 # --- YARDIMCI SABİTLER ---
 HYPE_WORDS = ['moon', 'rocket', 'yolo', 'squeeze', 'diamond', 'hands', 'ape', 'short', 'buy', 'hold', 'lfg', 'gem', 'pump']
@@ -64,14 +68,26 @@ def get_optimal_time_advice(selected_hour):
 # --- ARAYÜZ KONFİGÜRASYONU ---
 st.set_page_config(page_title="Reddit Finance AI", layout="wide", page_icon="📈")
 
+# --- YAN PANEL (SIDEBAR) ----
+subreddit_listesi = [
+    "finance", "financialindependence", "forex", "gme", 
+    "investing", "options", "pennystocks", "personalfinance", 
+    "robinhood", "securityanalysis", "stockmarket", "stocks", "wallstreetbet"
+]
+
 # --- YAN PANEL (SIDEBAR) ---
 with st.sidebar:
     st.header("🔍 Giriş Parametreleri")
     user_title = st.text_input("Gönderi Başlığı:", "GME to the moon! 🚀🚀🚀")
-    selected_sub = st.selectbox("Subreddit Seçin:", ["wallstreetbets", "stocks", "investing", "finance"])
+    
+    # GÜNCELLENEN KISIM: Subreddit listesini değişkenden alıyoruz
+    selected_sub = st.selectbox("Subreddit Seçin:", subreddit_listesi)
+    
     posted_time = st.slider("Paylaşım Saati (0-23):", 0, 23, 15)
     st.divider()
-    st.write("🎯 **Hedef Doğruluk:** %70")
+    
+    # GÜNCELLENEN KISIM: Doğruluk oranı modelden gelen metrikle dinamikleşti
+    st.write(f"🎯 **Hedef Doğruluk:** %{model_metrics['accuracy']:.1f}")
     st.write("📊 **Model:** XGBoost v2.0 (Enhanced)")
     st.info("Bu sistem hem etkileşimi tahmin eder hem de manipülasyon riskini denetler.")
 
@@ -199,3 +215,4 @@ with tab_eda:
     with e_col2:
         fig2 = px.pie(values=[45, 25, 30], names=['Pozitif', 'Negatif', 'Nötr'], title="Veri Seti Genel Duygu Dağılımı", hole=0.4)
         st.plotly_chart(fig2, use_container_width=True)
+
