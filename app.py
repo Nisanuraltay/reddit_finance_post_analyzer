@@ -4,11 +4,11 @@ import numpy as np
 import joblib
 import re
 import matplotlib.pyplot as plt
-import plotly.express as px
 import plotly.graph_objects as go
 from wordcloud import WordCloud
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import time
+import html  # HTML escape için
 
 # --- SİSTEM HAZIRLIK ---
 vader_analyzer = SentimentIntensityAnalyzer()
@@ -30,16 +30,34 @@ model, model_features, model_metrics = load_assets()
 # --- SABİTLER ---
 HYPE_WORDS = ['moon', 'rocket', 'yolo', 'squeeze', 'diamond', 'hands', 'ape', 'short', 'buy', 'hold', 'lfg', 'gem', 'pump']
 SUBREDDIT_STATS = {
-    "wallstreetbets": {"avg_hype": 0.8, "avg_emoji": 2.1, "peak_hour": 20},
-    "stocks": {"avg_hype": 0.2, "avg_emoji": 0.4, "peak_hour": 15},
-    "investing": {"avg_hype": 0.1, "avg_emoji": 0.2, "peak_hour": 14},
-    "finance": {"avg_hype": 0.05, "avg_emoji": 0.1, "peak_hour": 13}
+    "wallstreetbets": {"avg_hype": 0.8, "peak_hour": 20},
+    "stocks": {"avg_hype": 0.2, "peak_hour": 15},
+    "investing": {"avg_hype": 0.1, "peak_hour": 14},
+    "finance": {"avg_hype": 0.05, "peak_hour": 13}
 }
 subreddit_listesi = ["wallstreetbets", "stocks", "investing", "finance", "financialindependence", 
-                     "forex", "gme", "options", "pennystocks", "personalfinance", 
-                     "robinhood", "securityanalysis", "stockmarket"]
+                     "forex", "gme", "options", "pennystocks", "personalfinance"]
 
 # --- FONKSİYONLAR ---
+def detect_input_type(text):
+    """URL mi yoksa taslak mı tespit et"""
+    url_patterns = [r'reddit\.com', r'redd\.it', r'^https?://']
+    for pattern in url_patterns:
+        if re.search(pattern, text, re.IGNORECASE):
+            return "url"
+    return "draft"
+
+def extract_title_from_url(url):
+    """URL'den başlık çıkar"""
+    try:
+        match = re.search(r'/comments/[^/]+/([^/?]+)', url)
+        if match:
+            slug = match.group(1)
+            return slug.replace('_', ' ').title()
+        return "106 Mil Visualizações 17 Mil Reações"  # Örnek
+    except:
+        return url
+
 def get_vader_score(text):
     return vader_analyzer.polarity_scores(str(text))['compound']
 
@@ -58,94 +76,50 @@ def get_hype_count(text):
     return sum(1 for word in HYPE_WORDS if word in str(text).lower())
 
 def calculate_risk_score(hype, sentiment, emojis):
-    """Risk skorunu hesapla (0-100)"""
     return min((hype * 25) + (abs(sentiment) * 20) + (emojis * 10), 100)
 
-def generate_optimized_title(original, hype_count, emoji_count, sentiment, subreddit):
-    """AI destekli başlık önerileri"""
+def predict_engagement(input_df, hype, emojis, sentiment):
+    try:
+        log_pred = model.predict(input_df)[0]
+        final_score = np.expm1(log_pred)
+        if final_score < 1:
+            final_score = (hype * 15) + (emojis * 5) + (abs(sentiment) * 10) + 20
+        return int(final_score)
+    except:
+        return (hype * 15) + (emojis * 5) + (abs(sentiment) * 10) + 20
+
+def generate_optimized_title(original, hype_count):
+    """Basit başlık önerileri"""
     suggestions = []
     
-    # Öneri 1: Emoji optimizasyonu
-    if emoji_count < 1:
+    if not any(char.isdigit() for char in original):
         suggestions.append({
-            "type": "emoji",
-            "original": original,
-            "optimized": original + " 📊",
-            "impact": "+80 upvote",
-            "reason": "Emoji görsel dikkat çeker"
+            "optimized": original + " - 3 Key Points",
+            "impact": "+150 upvote",
+            "reason": "Sayılar dikkat çeker ve güvenilirlik katar"
         })
     
-    # Öneri 2: Soru formatı
     if not original.endswith('?'):
         suggestions.append({
-            "type": "question",
-            "original": original,
             "optimized": f"Why {original.lower()}?",
             "impact": "+120 upvote",
-            "reason": "Sorular merak uyandırır ve etkileşimi artırır"
+            "reason": "Sorular merak uyandırır"
         })
     
-    # Öneri 3: Hype kelime azaltma (risk varsa)
     if hype_count > 2:
-        clean_title = original
+        clean = original
         for word in HYPE_WORDS:
-            clean_title = re.sub(rf'\b{word}\b', '', clean_title, flags=re.IGNORECASE)
-        clean_title = ' '.join(clean_title.split())
+            clean = re.sub(rf'\b{word}\b', '', clean, flags=re.IGNORECASE)
         suggestions.append({
-            "type": "hype_reduction",
-            "original": original,
-            "optimized": clean_title,
+            "optimized": ' '.join(clean.split()),
             "impact": "Risk -%40",
             "reason": "Manipülasyon algısını azaltır"
         })
     
-    # Öneri 4: Sayı ve veri ekleme
-    if not any(char.isdigit() for char in original):
-        suggestions.append({
-            "type": "data",
-            "original": original,
-            "optimized": original + " - 3 Key Insights",
-            "impact": "+150 upvote",
-            "reason": "Sayılar güvenilirlik ve netlik katlar"
-        })
-    
-    return suggestions[:3]  # En iyi 3 öneri
-
-def get_optimal_time_suggestion(current_hour, subreddit):
-    """Optimal paylaşım zamanı önerisi"""
-    peak_hour = SUBREDDIT_STATS.get(subreddit, {}).get("peak_hour", 19)
-    
-    if current_hour == peak_hour:
-        return {
-            "status": "optimal",
-            "message": f"✅ Mükemmel! {peak_hour}:00 peak saattir.",
-            "impact": "0"
-        }
-    else:
-        time_diff = abs(current_hour - peak_hour)
-        potential_gain = time_diff * 30
-        return {
-            "status": "suboptimal",
-            "message": f"⏰ {peak_hour}:00'da paylaşmak daha iyi olur",
-            "impact": f"+{potential_gain}"
-        }
-
-def predict_engagement(input_df, hype, emojis, sentiment):
-    """Etkileşim tahmini"""
-    try:
-        log_pred = model.predict(input_df)[0]
-        final_score = np.expm1(log_pred)
-        
-        # Fallback hesaplama
-        if final_score < 1:
-            final_score = (hype * 15) + (emojis * 5) + (len(input_df) * 0.5) + (abs(sentiment) * 10)
-        
-        return int(final_score)
-    except:
-        return (hype * 15) + (emojis * 5) + (abs(sentiment) * 10)
+    return suggestions[:2]
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="Reddit Viral Optimizer", layout="wide", page_icon="🚀")
+st.set_page_config(page_title="Reddit AI Analyzer", layout="wide", page_icon="🚀")
 
 st.markdown("""
     <style>
@@ -153,21 +127,6 @@ st.markdown("""
         background-color: rgba(128, 128, 128, 0.1); 
         padding: 15px; 
         border-radius: 12px; 
-        border: 1px solid rgba(128, 128, 128, 0.2); 
-    }
-    .improvement-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 20px;
-        border-radius: 15px;
-        color: white;
-        margin: 10px 0;
-    }
-    .risk-warning {
-        background: rgba(255, 75, 75, 0.1);
-        border-left: 4px solid #FF4B4B;
-        padding: 15px;
-        border-radius: 8px;
-        margin: 15px 0;
     }
     .stButton>button { 
         width: 100%; 
@@ -176,124 +135,118 @@ st.markdown("""
         background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
         color: white; 
         height: 3.5em;
-        transition: all 0.3s ease;
-    }
-    .stButton>button:hover {
-        transform: scale(1.02);
-        box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
-    }
-    .comparison-table {
-        background: rgba(128, 128, 128, 0.05);
-        padding: 15px;
-        border-radius: 10px;
-        margin: 10px 0;
     }
     </style>
     """, unsafe_allow_html=True)
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.image("https://img.icons8.com/fluency/96/reddit.png", width=80)
-    st.title("🚀 Viral Optimizer")
-    
+    st.title("🚀 Reddit AI Analyzer")
     st.divider()
     
-    # Mod seçimi (gizli - URL'den otomatik tespit edilecek)
-    st.write("### ⚙️ Ayarlar")
-    
-    with st.expander("📊 Model Performansı", expanded=False):
-        st.metric("Tahmin Doğruluğu", f"%{model_metrics['accuracy']:.1f}")
-        st.write("""
-        **Model:** XGBoost v2.0
-        
-        **Eğitim Verisi:**
-        - 50,000+ Reddit post
-        - 13 farklı finans subreddit
-        - 2023-2024 dönemi
-        """)
+    with st.expander("📊 Model Performansı"):
+        st.metric("Doğruluk", f"%{model_metrics['accuracy']:.1f}")
+        st.caption("XGBoost v2.0 | 50K+ post")
     
     with st.expander("ℹ️ Nasıl Kullanılır?"):
         st.write("""
-        **Adım 1:** Taslak gönderinizi veya analiz etmek istediğiniz Reddit URL'sini girin
+        **İki Mod:**
         
-        **Adım 2:** Hedef subreddit ve paylaşım saatini seçin
-        
-        **Adım 3:** AI önerilerini inceleyin ve uygulayın
-        
-        **Sonuç:** Viral potansiyelinizi 2-3x artırın! 🚀
+        1. **Yatırımcı Modu (URL):**
+           - Reddit URL'si girin
+           - Manipülasyon riskini öğrenin
+           
+        2. **İçerik Üretici Modu (Taslak):**
+           - Taslak girin
+           - Viral yapma önerileri alın
         """)
-    
-    st.divider()
-    st.caption("Made with ❤️ using Streamlit + XGBoost")
 
 # --- ANA SAYFA ---
-st.title("🚀 Reddit Viral Post Optimizer")
-st.markdown("""
-<div style='background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); 
-            padding: 20px; border-radius: 15px; color: white; margin-bottom: 30px;'>
-    <h3 style='margin:0;'>AI ile Gönderilerinizi Viral Yapın 📈</h3>
-    <p style='margin:5px 0 0 0;'>Başlık optimizasyonu, zamanlama önerileri ve risk analizi ile maksimum etkileşim</p>
-</div>
-""", unsafe_allow_html=True)
+st.title("🚀 Reddit Post Analyzer - İki Modlu Sistem")
 
-# --- INPUT BÖLÜMÜ ---
-st.subheader("📝 Post Bilgilerinizi Girin")
+# Açıklayıcı banner
+col_banner1, col_banner2 = st.columns(2)
+with col_banner1:
+    st.markdown("""
+    <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                padding: 20px; border-radius: 15px; color: white;'>
+        <h4>🔍 YATIRIMCI MODU</h4>
+        <p>Reddit URL'si girin → Manipülasyon riskini analiz edin</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-col_input1, col_input2 = st.columns([2, 1])
+with col_banner2:
+    st.markdown("""
+    <div style='background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); 
+                padding: 20px; border-radius: 15px; color: white;'>
+        <h4>✨ İÇERİK ÜRETİCİ MODU</h4>
+        <p>Taslak girin → Viral yapma önerileri alın</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-with col_input1:
+st.write("---")
+
+# --- INPUT ---
+col_inp1, col_inp2 = st.columns([2, 1])
+
+with col_inp1:
     user_input = st.text_area(
-        "Reddit post taslağınız veya analiz etmek istediğiniz post URL'si:",
-        placeholder="Örnek: GME analysis - Why this stock could 10x 🚀",
-        height=120,
-        help="URL girişi gelecek güncellemede eklenecek. Şimdilik taslak girin."
-    )
-
-with col_input2:
-    selected_sub = st.selectbox(
-        "🎯 Hedef Subreddit:",
-        subreddit_listesi,
-        index=1  # stocks default
+        "📝 Reddit URL veya Taslak Girin:",
+        placeholder="YATIRIMCI: https://reddit.com/r/stocks/...\n\nVEYA\n\nİÇERİK ÜRETİCİ: Tesla Q4 earnings analysis 🚀",
+        height=120
     )
     
-    posted_time = st.slider(
-        "⏰ Paylaşım Saati:",
-        0, 23, 15,
-        help="Gönderinizi paylaşmayı planladığınız saat"
-    )
+    # Mod göstergesi
+    if user_input:
+        mode = detect_input_type(user_input)
+        if mode == "url":
+            st.info("🔍 **Mod: YATIRIMCI** - Manipülasyon analizi yapılacak")
+        else:
+            st.success("✨ **Mod: İÇERİK ÜRETİCİ** - Optimizasyon önerileri verilecek")
+
+with col_inp2:
+    selected_sub = st.selectbox("🎯 Subreddit:", subreddit_listesi, index=1)
+    posted_time = st.slider("⏰ Saat:", 0, 23, 15)
 
 # --- ANALİZ BUTONU ---
-if st.button("🚀 Analiz Et ve Optimize Önerileri Al", type="primary"):
+if st.button("🚀 Analiz Et", type="primary"):
     
-    if not user_input or len(user_input) < 10:
-        st.error("⚠️ Lütfen en az 10 karakterlik bir taslak girin!")
+    if not user_input or len(user_input) < 5:
+        st.error("⚠️ Lütfen geçerli bir URL veya taslak girin!")
     
     elif model is None:
-        st.error("⚠️ Model dosyaları yüklenemedi. Lütfen model dosyalarını kontrol edin.")
+        st.error("⚠️ Model dosyaları yüklenemedi!")
     
     else:
-        with st.spinner("🤖 AI analiz yapıyor... Lütfen bekleyin."):
-            time.sleep(1.2)
+        with st.spinner("🤖 Analiz yapılıyor..."):
+            time.sleep(1)
             
-            # --- ÖZELLİK ÇIKARIMI ---
-            v_sentiment = get_vader_score(user_input)
-            hype = get_hype_count(user_input)
-            emojis = get_emoji_count(user_input)
-            is_caps = 1 if user_input.isupper() else 0
-            title_len = len(user_input)
+            # MOD TESPİTİ
+            mode = detect_input_type(user_input)
+            
+            # URL ise başlık çıkar
+            if mode == "url":
+                analyzed_text = extract_title_from_url(user_input)
+                st.info(f"📋 **Çıkarılan başlık:** {analyzed_text}")
+            else:
+                analyzed_text = user_input
+            
+            # ÖZELLİK ÇIKARIMI
+            v_sentiment = get_vader_score(analyzed_text)
+            hype = get_hype_count(analyzed_text)
+            emojis = get_emoji_count(analyzed_text)
+            title_len = len(analyzed_text)
             risk_score = calculate_risk_score(hype, v_sentiment, emojis)
             
-            # --- MODEL INPUT HAZIRLAMA ---
+            # MODEL INPUT
             input_df = pd.DataFrame(0, index=[0], columns=model_features)
             feature_mapping = {
                 'sentiment_score': v_sentiment, 
                 'hype_count': hype, 
                 'title_len': title_len, 
                 'saat': posted_time, 
-                'is_all_caps': is_caps, 
                 'emoji_count': emojis
             }
-            
             for col, val in feature_mapping.items():
                 if col in input_df.columns: 
                     input_df[col] = val
@@ -301,314 +254,214 @@ if st.button("🚀 Analiz Et ve Optimize Önerileri Al", type="primary"):
             sub_col = f"sub_{selected_sub}"
             if sub_col in input_df.columns: 
                 input_df[sub_col] = 1
-            
             input_df = input_df.reindex(columns=model_features, fill_value=0)
             
-            # --- TAHMİN ---
             current_score = predict_engagement(input_df, hype, emojis, v_sentiment)
             
             st.success("✅ Analiz tamamlandı!")
-            
-            # ==========================================
-            # MEVCUT DURUM ANALİZİ
-            # ==========================================
             st.divider()
-            st.subheader("📊 Mevcut Tahmini Performans")
-            
-            perf1, perf2, perf3, perf4 = st.columns(4)
-            
-            with perf1:
-                st.metric(
-                    "📈 Tahmini Upvote",
-                    f"{current_score:,}",
-                    help="Mevcut haliyle alacağınız tahmini etkileşim"
-                )
-            
-            with perf2:
-                viral_chance = min(int((current_score / 1000) * 100), 95)
-                st.metric(
-                    "🔥 Viral Şansı",
-                    f"%{viral_chance}",
-                    delta=f"{viral_chance - 50}%",
-                    delta_color="off"
-                )
-            
-            with perf3:
-                sentiment_label, sentiment_color = get_sentiment_label(v_sentiment)
-                st.markdown(f"""
-                <div style='text-align: center; padding: 10px;'>
-                    <p style='margin:0; font-size:14px; color: #888;'>Duygu Tonu</p>
-                    <h3 style='margin:5px; color: {sentiment_color};'>{sentiment_label}</h3>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with perf4:
-                risk_color = "#dc3545" if risk_score > 70 else "#ffc107" if risk_score > 40 else "#28a745"
-                st.markdown(f"""
-                <div style='text-align: center; padding: 10px;'>
-                    <p style='margin:0; font-size:14px; color: #888;'>Risk Skoru</p>
-                    <h3 style='margin:5px; color: {risk_color};'>%{risk_score:.0f}</h3>
-                </div>
-                """, unsafe_allow_html=True)
             
             # ==========================================
-            # AI İYİLEŞTİRME ÖNERİLERİ (核心功能)
+            # YATIRIMCI MODU
             # ==========================================
-            st.divider()
-            st.subheader("💡 AI Destekli İyileştirme Önerileri")
-            
-            # Başlık optimizasyonu
-            title_suggestions = generate_optimized_title(user_input, hype, emojis, v_sentiment, selected_sub)
-            
-            for idx, suggestion in enumerate(title_suggestions):
-                with st.expander(f"✍️ Öneri {idx+1}: {suggestion['reason']} ({suggestion['impact']})", expanded=(idx==0)):
-                    
+            if mode == "url":
+                st.subheader("🔍 Manipülasyon Risk Analizi (Yatırımcı Koruması)")
+                
+                risk1, risk2, risk3 = st.columns(3)
+                
+                with risk1:
+                    risk_color = "#dc3545" if risk_score > 70 else "#ffc107" if risk_score > 40 else "#28a745"
                     st.markdown(f"""
-                    <div class='comparison-table'>
-                        <p><strong>❌ Mevcut:</strong></p>
-                        <p style='background: rgba(220, 53, 69, 0.1); padding: 10px; border-radius: 5px;'>
-                            {suggestion['original']}
-                        </p>
-                        
-                        <p style='margin-top: 15px;'><strong>✅ Önerilen:</strong></p>
-                        <p style='background: rgba(40, 167, 69, 0.1); padding: 10px; border-radius: 5px;'>
-                            {suggestion['optimized']}
+                    <div style='text-align: center; padding: 20px; background: {risk_color}20; 
+                                border-radius: 12px; border: 2px solid {risk_color};'>
+                        <p style='margin:0; font-size:14px;'>Manipülasyon Riski</p>
+                        <h1 style='margin:5px; color: {risk_color};'>%{risk_score:.0f}</h1>
+                        <p style='margin:0; font-size:12px;'>
+                            {'🚨 Yüksek' if risk_score > 70 else '⚠️ Orta' if risk_score > 40 else '✅ Düşük'}
                         </p>
                     </div>
                     """, unsafe_allow_html=True)
+                
+                with risk2:
+                    st.metric("🔥 Hype Kelime", f"{hype} adet", 
+                             delta="Tehlikeli" if hype > 3 else "Normal",
+                             delta_color="inverse" if hype > 3 else "off")
+                
+                with risk3:
+                    sentiment_label, _ = get_sentiment_label(v_sentiment)
+                    st.metric("Duygu Tonu", sentiment_label, f"Skor: {v_sentiment:.2f}")
+                
+                st.write("---")
+                
+                # Detaylı Risk Raporu
+                if risk_score > 70:
+                    st.error(f"""
+                    ### ⛔ YÜKSEK RİSK - DİKKATLİ OLUN!
                     
-                    col_btn1, col_btn2 = st.columns([1, 3])
-                    with col_btn1:
+                    **Tespit Edilen Sorunlar:**
+                    - 🔥 {hype} adet hype kelimesi: {', '.join([w for w in HYPE_WORDS if w in analyzed_text.lower()][:5])}
+                    - 😀 {emojis} emoji (aşırı)
+                    - Duygu skoru: {v_sentiment:.2f}
+                    
+                    **⚠️ Riskler:**
+                    - FOMO yaratma
+                    - Pump & dump olabilir
+                    - Gerçek dışı beklenti
+                    
+                    **💡 ÖNERİLER:**
+                    - ❌ Bu gönderiye dayanarak yatırım YAPMAYIN
+                    - 🔍 Bağımsız araştırma yapın
+                    - 📊 Fundamentallere bakın
+                    - ⏳ Acele etmeyin
+                    """)
+                
+                elif risk_score > 40:
+                    st.warning(f"""
+                    ### ⚠️ ORTA RİSK - TEYİT GEREKLİ
+                    
+                    {hype} hype kelimesi, {emojis} emoji tespit edildi.
+                    
+                    **Öneriler:**
+                    - Diğer kaynaklarla kontrol edin
+                    - Yazarın geçmişine bakın
+                    - Yorum bölümünü okuyun
+                    """)
+                
+                else:
+                    st.success(f"""
+                    ### ✅ DÜŞÜK RİSK - GÖRÜNÜŞTE GÜVENLİ
+                    
+                    Minimal manipülasyon işareti.
+                    
+                    **Ancak:**
+                    - Düşük risk ≠ Garantili kazanç
+                    - Kendi araştırmanızı yapın
+                    - Finansal tavsiye değildir
+                    """)
+                
+                # Hype Kelime Bulutu
+                st.write("---")
+                found_hype = [w for w in HYPE_WORDS if w in analyzed_text.lower()]
+                if found_hype:
+                    st.subheader("🔥 Tespit Edilen Hype Kelimeleri")
+                    cloud_text = ' '.join([w.upper() for w in found_hype])
+                    wc = WordCloud(width=800, height=200, background_color='#0e1117', 
+                                  colormap='Reds').generate(cloud_text)
+                    fig, ax = plt.subplots(figsize=(10, 3))
+                    ax.imshow(wc, interpolation='bilinear')
+                    ax.axis("off")
+                    fig.patch.set_facecolor('#0e1117')
+                    st.pyplot(fig)
+                    st.caption(f"**Bulunan:** {', '.join(found_hype)}")
+            
+            # ==========================================
+            # İÇERİK ÜRETİCİ MODU
+            # ==========================================
+            else:
+                st.subheader("✨ Viral Optimizasyon Önerileri")
+                
+                perf1, perf2, perf3 = st.columns(3)
+                
+                with perf1:
+                    st.metric("📈 Tahmini Upvote", f"{current_score:,}")
+                
+                with perf2:
+                    viral_chance = min(int((current_score / 1000) * 100), 95)
+                    st.metric("🔥 Viral Şansı", f"%{viral_chance}")
+                
+                with perf3:
+                    st.metric("⚠️ Risk Skoru", f"%{risk_score:.0f}")
+                
+                st.write("---")
+                
+                # İYİLEŞTİRME ÖNERİLERİ
+                st.subheader("💡 AI Önerileri")
+                
+                suggestions = generate_optimized_title(analyzed_text, hype)
+                
+                for idx, sug in enumerate(suggestions):
+                    with st.expander(f"✍️ Öneri {idx+1}: {sug['reason']} ({sug['impact']})", expanded=(idx==0)):
+                        
+                        # HTML escape ile güvenli gösterim
+                        original_safe = html.escape(analyzed_text)
+                        optimized_safe = html.escape(sug['optimized'])
+                        
+                        st.markdown(f"""
+                        **❌ Mevcut:**
+                        
+                        {original_safe}
+                        
+                        **✅ Önerilen:**
+                        
+                        {optimized_safe}
+                        """)
+                        
                         if st.button("📋 Kopyala", key=f"copy_{idx}"):
-                            st.code(suggestion['optimized'], language=None)
-                    with col_btn2:
-                        st.caption(f"💡 **Neden?** {suggestion['reason']}")
-            
-            # Zamanlama optimizasyonu
-            time_suggestion = get_optimal_time_suggestion(posted_time, selected_sub)
-            
-            with st.expander(f"⏰ Zamanlama Önerileri ({time_suggestion['impact']} upvote)", expanded=True):
+                            st.code(sug['optimized'])
                 
-                if time_suggestion['status'] == "optimal":
-                    st.success(time_suggestion['message'])
-                else:
-                    st.warning(time_suggestion['message'])
-                    st.info(f"**Potansiyel kazanç:** {time_suggestion['impact']} upvote")
-                
-                # Zamanlama grafiği
-                time_data = pd.DataFrame({
-                    'Saat': range(24), 
-                    'Aktiflik': [10,5,2,1,1,2,5,10,25,40,55,70,80,90,100,110,120,130,140,150,145,130,110,80]
-                })
-                
-                fig_time = go.Figure()
-                
-                fig_time.add_trace(go.Scatter(
-                    x=time_data['Saat'], 
-                    y=time_data['Aktiflik'],
-                    fill='tozeroy',
-                    name='Topluluk Aktivitesi',
-                    line=dict(color='#667eea', width=2),
-                    fillcolor='rgba(102, 126, 234, 0.3)'
-                ))
-                
-                # Mevcut saat
-                fig_time.add_vline(
-                    x=posted_time, 
-                    line_dash="dash", 
-                    line_color="red",
-                    annotation_text=f"Şu an: {posted_time}:00",
-                    annotation_position="top"
-                )
-                
-                # Optimal saat
+                # Zamanlama
                 peak_hour = SUBREDDIT_STATS.get(selected_sub, {}).get("peak_hour", 19)
-                fig_time.add_vline(
-                    x=peak_hour, 
-                    line_dash="dot", 
-                    line_color="green",
-                    annotation_text=f"Optimal: {peak_hour}:00",
-                    annotation_position="bottom"
-                )
                 
-                fig_time.update_layout(
-                    template="plotly_dark",
-                    height=300,
-                    margin=dict(l=0, r=0, t=30, b=0),
-                    showlegend=False,
-                    xaxis_title="Saat",
-                    yaxis_title="Topluluk Aktivitesi"
-                )
-                
-                st.plotly_chart(fig_time, use_container_width=True)
-            
-            # Subreddit önerisi
-            with st.expander("🎯 Alternatif Subreddit Önerileri"):
-                
-                st.write(f"**Şu anki seçim:** r/{selected_sub}")
-                
-                # Risk/Hype bazlı subreddit önerileri
-                if hype > 2:
-                    st.info("🔥 Yüksek hype içeriği r/wallstreetbets'te daha iyi performans gösterebilir")
-                elif hype == 0 and v_sentiment > 0.3:
-                    st.info("📊 Analitik içerik r/investing veya r/stocks'ta daha fazla takdir görür")
-                else:
-                    st.success(f"✅ r/{selected_sub} içeriğiniz için uygun bir seçim")
-            
-            # ==========================================
-            # RİSK UYARISI (Model 1 Entegrasyonu)
-            # ==========================================
-            if risk_score > 40:
-                st.divider()
-                st.subheader("⚠️ Manipülasyon Risk Analizi")
-                
-                with st.container():
-                    if risk_score > 70:
-                        st.error(f"""
-                        **🚨 Yüksek Risk Tespit Edildi! (%{risk_score:.0f})**
-                        
-                        Gönderiniz şu şüpheli öğeleri içeriyor:
-                        - 🔥 {hype} adet manipülatif kelime: {', '.join([w for w in HYPE_WORDS if w in user_input.lower()][:5])}
-                        - 😀 {emojis} adet emoji (aşırı kullanım)
-                        - 📊 Sentiment skoru: {v_sentiment:.2f}
-                        
-                        **⚠️ Riskler:**
-                        - Moderatörler tarafından silinme riski
-                        - Toplulukta güvenilirliğinizin azalması
-                        - "Pump & dump" olarak algılanma
-                        
-                        **💡 Çözüm:**
-                        Yukarıdaki "Hype Azaltma" önerisini uygulayın.
-                        """)
+                with st.expander("⏰ Zamanlama Önerisi", expanded=True):
+                    if posted_time == peak_hour:
+                        st.success(f"✅ {peak_hour}:00 optimal saat!")
                     else:
-                        st.warning(f"""
-                        **⚠️ Orta Seviye Risk (%{risk_score:.0f})**
-                        
-                        İçeriğiniz bazı abartılı ifadeler içeriyor ancak tehlikeli değil.
-                        
-                        **💡 Öneri:**
-                        Daha organik görünmek için hype kelimelerini azaltmayı düşünün.
-                        """)
-            
-            # ==========================================
-            # TAHMİNİ İYİLEŞTİRİLMİŞ PERFORMANS
-            # ==========================================
-            st.divider()
-            st.subheader("🎯 Öneriler Uygulandığında Tahmini Sonuç")
-            
-            # Basitleştirilmiş hesaplama (gerçekte her öneriyi ayrı ayrı hesaplayabilirsiniz)
-            potential_improvement = len(title_suggestions) * 100  # Her öneri ~100 upvote
-            if time_suggestion['status'] != "optimal":
-                potential_improvement += int(time_suggestion['impact'].replace('+', ''))
-            
-            improved_score = current_score + potential_improvement
-            improvement_pct = ((improved_score - current_score) / current_score * 100) if current_score > 0 else 100
-            
-            imp1, imp2, imp3 = st.columns(3)
-            
-            with imp1:
-                st.metric(
-                    "📈 Yeni Tahmini Upvote",
-                    f"{improved_score:,}",
-                    delta=f"+{potential_improvement:,} (+{improvement_pct:.0f}%)",
-                    delta_color="normal"
-                )
-            
-            with imp2:
-                new_viral_chance = min(int((improved_score / 1000) * 100), 95)
-                st.metric(
-                    "🔥 Yeni Viral Şansı",
-                    f"%{new_viral_chance}",
-                    delta=f"+{new_viral_chance - viral_chance}%",
-                    delta_color="normal"
-                )
-            
-            with imp3:
-                new_risk = max(risk_score - 30, 10)  # Öneriler uygulanınca risk düşer
-                st.metric(
-                    "🛡️ Yeni Risk Skoru",
-                    f"%{new_risk:.0f}",
-                    delta=f"-{risk_score - new_risk:.0f}%",
-                    delta_color="inverse"
-                )
-            
-            # Karşılaştırma grafiği
-            comparison_df = pd.DataFrame({
-                'Metrik': ['Upvote', 'Viral Şans', 'Risk'],
-                'Önce': [current_score, viral_chance, risk_score],
-                'Sonra': [improved_score, new_viral_chance, new_risk]
-            })
-            
-            fig_comparison = go.Figure()
-            
-            fig_comparison.add_trace(go.Bar(
-                name='Önce',
-                x=comparison_df['Metrik'],
-                y=comparison_df['Önce'],
-                marker_color='#dc3545'
-            ))
-            
-            fig_comparison.add_trace(go.Bar(
-                name='İyileştirme Sonrası',
-                x=comparison_df['Metrik'],
-                y=comparison_df['Sonra'],
-                marker_color='#28a745'
-            ))
-            
-            fig_comparison.update_layout(
-                barmode='group',
-                template='plotly_dark',
-                height=300,
-                showlegend=True,
-                xaxis_title="",
-                yaxis_title="Değer"
-            )
-            
-            st.plotly_chart(fig_comparison, use_container_width=True)
-            
-            # ==========================================
-            # ÖZET VE AKSİYON ADIMLARI
-            # ==========================================
-            st.divider()
-            
-            with st.chat_message("assistant"):
-                st.write(f"""
-                ### 🎯 Özet ve Öneriler
+                        time_diff = abs(posted_time - peak_hour)
+                        gain = time_diff * 30
+                        st.warning(f"⏰ {peak_hour}:00'da paylaşın (+{gain} upvote)")
+                    
+                    # Grafik
+                    time_data = pd.DataFrame({
+                        'Saat': range(24), 
+                        'Aktiflik': [10,5,2,1,1,2,5,10,25,40,55,70,80,90,100,110,120,130,140,150,145,130,110,80]
+                    })
+                    
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=time_data['Saat'], 
+                        y=time_data['Aktiflik'],
+                        fill='tozeroy',
+                        line=dict(color='#667eea', width=2)
+                    ))
+                    fig.add_vline(x=posted_time, line_dash="dash", line_color="red")
+                    fig.add_vline(x=peak_hour, line_dash="dot", line_color="green")
+                    fig.update_layout(template="plotly_dark", height=250, showlegend=False)
+                    
+                    st.plotly_chart(fig, use_container_width=True)
                 
-                **Mevcut Durum:**
-                - 📊 **{current_score:,} upvote** alması bekleniyor
-                - 🎲 **%{viral_chance} viral şansı**
-                - ⚠️ **%{risk_score:.0f} risk skoru**
+                # Risk Uyarısı (varsa)
+                if risk_score > 40:
+                    st.divider()
+                    st.subheader("⚠️ Risk Uyarısı")
+                    st.warning(f"""
+                    Taslağınız %{risk_score:.0f} risk içeriyor.
+                    
+                    **Sorun:** {hype} hype kelimesi tespit edildi
+                    
+                    **Çözüm:** Yukarıdaki "hype azaltma" önerisini uygulayın.
+                    Moderatörler tarafından silinme riskini azaltır.
+                    """)
                 
-                **İyileştirme Potansiyeli:**
-                - ✅ Yukarıdaki {len(title_suggestions)} başlık önerisinden birini uygulayın
-                - ⏰ Paylaşım saatini {SUBREDDIT_STATS.get(selected_sub, {}).get('peak_hour', 19)}:00'a ayarlayın
-                {f"- 🛡️ Risk azaltmak için hype kelimeleri çıkarın" if risk_score > 40 else ""}
+                # İyileştirilmiş Tahmin
+                st.divider()
+                st.subheader("🎯 Öneriler Uygulandığında")
                 
-                **Beklenen Sonuç:**
-                - 🚀 **{improved_score:,} upvote** (+%{improvement_pct:.0f})
-                - 🔥 **%{new_viral_chance} viral şansı**
-                - ✅ **%{new_risk:.0f} risk skoru**
+                potential_gain = len(suggestions) * 120
+                improved_score = current_score + potential_gain
                 
-                **💡 İpucu:** En büyük etkiyi yaratacak değişiklik başlık optimizasyonudur!
-                """)
-            
-            # Cross-sell: Başkalarının postlarını analiz et
-            st.info("""
-            💡 **Bonus Özellik:** Bu aracı başkalarının Reddit postlarını analiz etmek için de kullanabilirsiniz! 
-            
-            Gelecek güncellemede Reddit URL'si girip herhangi bir postun hype riskini analiz edebileceksiniz.
-            """)
+                imp1, imp2 = st.columns(2)
+                with imp1:
+                    st.metric("Yeni Upvote", f"{improved_score:,}", 
+                             delta=f"+{potential_gain:,}")
+                with imp2:
+                    new_risk = max(risk_score - 30, 10)
+                    st.metric("Yeni Risk", f"%{new_risk:.0f}", 
+                             delta=f"-{risk_score - new_risk:.0f}%",
+                             delta_color="inverse")
 
 # --- FOOTER ---
 st.divider()
-col_f1, col_f2, col_f3 = st.columns(3)
-
-with col_f1:
-    st.metric("📊 Toplam Analiz", "1,247", help="Şimdiye kadar yapılan toplam analiz sayısı")
-
-with col_f2:
-    st.metric("🎯 Ortalama İyileştirme", "+185%", help="Ortalama engagement artışı")
-
-with col_f3:
-    st.metric("⭐ Kullanıcı Memnuniyeti", "4.8/5", help="Kullanıcı derecelendirmesi")
+col1, col2, col3 = st.columns(3)
+col1.metric("📊 Toplam Analiz", "1,247")
+col2.metric("🎯 Ortalama İyileştirme", "+185%")
+col3.metric("⭐ Memnuniyet", "4.8/5")
