@@ -350,30 +350,53 @@ if st.button("🚀 Analiz Et", type="primary"):
                     - Finansal tavsiye değildir
                     """)
                 
-                # Hype Kelime Bulutu - MATPLOTLIB YERİNE DİREKT IMAGE
+                # Hype Kelime Tespiti - WORDCLOUD YERİNE BADGE'LER
                 st.write("---")
                 found_hype = [w for w in HYPE_WORDS if w in analyzed_text.lower()]
                 if found_hype:
                     st.subheader("🔥 Tespit Edilen Hype Kelimeleri")
-                    cloud_text = ' '.join([w.upper() for w in found_hype])
                     
-                    # WordCloud oluştur
-                    wc = WordCloud(
-                        width=1200,
-                        height=300,
-                        background_color='#0e1117',
-                        colormap='Reds',
-                        max_font_size=50,
-                        min_font_size=18,
-                        margin=5,
-                        relative_scaling=0.5,
-                        prefer_horizontal=0.7
-                    ).generate(cloud_text)
+                    # Kelime sıklığını hesapla
+                    word_freq = {}
+                    for word in found_hype:
+                        word_freq[word] = analyzed_text.lower().count(word)
                     
-                    # WordCloud'u direkt Streamlit image olarak göster (matplotlib kullanmadan)
-                    st.image(wc.to_array(), use_container_width=True)
+                    # Frekansa göre sırala
+                    sorted_words = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)
                     
-                    st.caption(f"**Bulunan:** {', '.join(found_hype)}")
+                    # Badge'ler olarak göster
+                    badge_html = "<div style='display: flex; flex-wrap: wrap; gap: 10px; padding: 20px; background: rgba(220, 53, 69, 0.1); border-radius: 15px; border: 2px dashed #dc3545;'>"
+                    
+                    for word, count in sorted_words:
+                        # Sıklığa göre boyut
+                        size = min(12 + (count * 2), 24)
+                        opacity = min(0.5 + (count * 0.2), 1.0)
+                        
+                        badge_html += f"""
+                        <span style='
+                            background: linear-gradient(135deg, #ff6b6b, #ee5a6f);
+                            color: white;
+                            padding: 8px 16px;
+                            border-radius: 20px;
+                            font-size: {size}px;
+                            font-weight: bold;
+                            text-transform: uppercase;
+                            opacity: {opacity};
+                            box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+                            display: inline-block;
+                            margin: 5px;
+                        '>
+                            {word.upper()} 
+                            {f'<span style="font-size: 10px; opacity: 0.7;">×{count}</span>' if count > 1 else ''}
+                        </span>
+                        """
+                    
+                    badge_html += "</div>"
+                    st.markdown(badge_html, unsafe_allow_html=True)
+                    
+                    st.caption(f"**{len(found_hype)} farklı hype kelimesi tespit edildi**")
+                else:
+                    st.success("✅ Hype kelimesi tespit edilmedi - içerik temiz görünüyor")
             
             # ==========================================
             # İÇERİK ÜRETİCİ MODU
