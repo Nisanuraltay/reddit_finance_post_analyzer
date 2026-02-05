@@ -350,37 +350,28 @@ if st.button("🚀 Analiz Et", type="primary"):
                     - Finansal tavsiye değildir
                     """)
                 
-                # Hype Kelime Bulutu - DÜZELTİLDİ
+                # Hype Kelime Bulutu - MATPLOTLIB YERİNE DİREKT IMAGE
                 st.write("---")
                 found_hype = [w for w in HYPE_WORDS if w in analyzed_text.lower()]
                 if found_hype:
                     st.subheader("🔥 Tespit Edilen Hype Kelimeleri")
                     cloud_text = ' '.join([w.upper() for w in found_hype])
                     
-                    # WordCloud ayarları - siyah kutu kaldırıldı, kelime boyutu küçültüldü
+                    # WordCloud oluştur
                     wc = WordCloud(
-                        width=800, 
-                        height=200, 
+                        width=1200,
+                        height=300,
                         background_color='#0e1117',
                         colormap='Reds',
-                        max_font_size=60,        # Maksimum kelime boyutu
-                        min_font_size=20,        # Minimum kelime boyutu
-                        margin=0,                # Siyah kenar boşluğunu kaldır
-                        relative_scaling=0.5,    # Kelime sıklığına göre boyut oranı
-                        prefer_horizontal=0.7    # Kelimelerin %70'i yatay
+                        max_font_size=50,
+                        min_font_size=18,
+                        margin=5,
+                        relative_scaling=0.5,
+                        prefer_horizontal=0.7
                     ).generate(cloud_text)
                     
-                    fig, ax = plt.subplots(figsize=(10, 3))
-                    ax.imshow(wc, interpolation='bilinear')
-                    ax.axis("off")
-                    fig.patch.set_facecolor('#0e1117')
-                    
-                    # Sıkı sınırlar - siyah kutuyu tamamen kaldır
-                    plt.tight_layout(pad=0)
-                    plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
-                    
-                    st.pyplot(fig, use_container_width=True)
-                    plt.close()  # Memory leak önleme
+                    # WordCloud'u direkt Streamlit image olarak göster (matplotlib kullanmadan)
+                    st.image(wc.to_array(), use_container_width=True)
                     
                     st.caption(f"**Bulunan:** {', '.join(found_hype)}")
             
