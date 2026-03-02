@@ -23,7 +23,6 @@
 - [Canlı Uygulama](#-canlı-uygulama)
 - [Looker Studio Dashboard](#-looker-studio-dashboard)
 - [Proje Yapısı](#-proje-yapısı)
-- [GitHub'a Ne Yüklemeli?](#-githuba-ne-yüklemeli--adım-adım-rehber)
 - [Teknolojiler](#-teknolojiler)
 - [Ekip](#-ekip)
 
