@@ -238,7 +238,7 @@ features = [
 
 ## 🖥️ Canlı Uygulama
 
-**Demo:** [Streamlit linkinizi buraya ekleyin](https://your-streamlit-link.streamlit.app)
+**Demo:** [Reddit Finance Post Analyzer](https://redditfinancepostanalyzer-5mfm2rzneimsv8pwaa9rpt.streamlit.app/)
 
 ### Akış Diyagramı
 
@@ -264,9 +264,8 @@ Kullanıcı Girişi                  Sistem Çıktısı
 
 ## 📊 Looker Studio Dashboard
 
-**Dashboard:** [Looker Studio linkinizi buraya ekleyin](#)
+**Dashboard:** [Looker Studio Dashboard](#)
 
-Dashboard'u paylaşmak için: *Share → Manage access → "Anyone with link can view"*
 
 | Sayfa | Soru | Görseller |
 |-------|------|-----------|
@@ -284,34 +283,28 @@ Dashboard'u paylaşmak için: *Share → Manage access → "Anyone with link can
 ```
 reddit-finance-post-analyzer/
 │
-├── app.py                        ✅ Streamlit uygulaması (2 modlu)
-├── final_reddit_model.pkl        ✅ Eğitilmiş XGBoost modeli
-├── final_features.pkl            ✅ Model feature listesi
-├── metrics.pkl                   ✅ Model metrikleri
-├── requirements.txt              ✅ Bağımlılıklar
+├── app.py                        
+├── final_reddit_model.pkl        
+├── final_features.pkl            
+├── metrics.pkl                
+├── requirements.txt              
 │
 ├── notebooks/
-│   └── Reddit_Data.ipynb         ⬆️ YÜKLENMELİ — EDA + Feature Engineering
-│
+│   └── Reddit_Data.ipynb         
 ├── reports/
-│   └── REDDIT_POST_ANALYZER.pdf  ⬆️ YÜKLENMELİ — Looker Studio sunum PDF'i
+│   └── REDDIT_POST_ANALYZER.pdf  
 │
 ├── data/
-│   └── README.md                 ⬆️ YÜKLENMELİ — Veri erişim talimatları
+│   └── README.md                 
 │
-├── .devcontainer/                ✅ Mevcut
-├── .gitignore                    ⬆️ GÜNCELLENMELİ
-└── README.md                     ✅ Bu dosya
+├── .devcontainer/                
+├── .gitignore                    
+└── README.md                     
 
 
-
-> **Not:** Notebook'lar Google Colab + BigQuery ortamı için yazılmıştır. Lokal çalıştırmak için BigQuery proje erişimi veya veriyi lokal CSV olarak indirip `file_path` değişkenini güncellemeniz gerekir.
-
----
 
 ## ⚠️ Sınırlamalar
 
-- **BigQuery erişimi:** Ham veri herkese açık değil — `odev-482215` projesine erişim gerektirir
 - **VADER sınırları:** İngilizce için optimize — Reddit slang bazen yanlış sınıflandırılabilir
 - **UTC zaman dilimi:** Saat verileri UTC tabanlı, lokal saat dilimine göre yorumlanmalı
 - **Finansal tavsiye değildir:** Manipülasyon risk skoru bir araştırma çıktısıdır, yatırım kararı olarak kullanılamaz
